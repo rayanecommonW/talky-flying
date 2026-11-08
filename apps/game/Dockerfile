@@ -1,6 +1,7 @@
 # Build context: repository root.  docker build -f apps/game/Dockerfile .
 FROM node:24-slim
-RUN corepack enable
+# pnpm shells out to git during install
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/* && corepack enable
 WORKDIR /app
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml tsconfig.base.json ./
 COPY packages/shared/package.json packages/shared/
