@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
 from collections import deque
 from collections.abc import AsyncIterator
@@ -22,6 +23,8 @@ log = logging.getLogger("radio.show")
 
 CALL_SAMPLE_RATE = 16_000
 SUMMARIZE_EVERY = 4
+# Backup in case the host agrees on air but forgets the control line.
+ASKS_FOR_ESCORT = re.compile(r"\b(escort|backup|back up|assist|assistance|wingm[ae]n|send (me )?(some |a )?drones?)\b", re.IGNORECASE)
 KEEP_RECENT = 24
 
 
@@ -37,6 +40,8 @@ class Call:
     pcm: bytearray = field(default_factory=bytearray)
     recorder: asyncio.Task | None = None
     ended: bool = False
+    # Set once the tail of the recording is in.
+    done: asyncio.Event = field(default_factory=asyncio.Event)
 
 
 class Show:
@@ -193,17 +198,20 @@ class Show:
             return
         call.ended = True
         self.call = None
+        # Queue it right away so the show doesn't slip back into its script in the meantime.
+        self.finished_calls.append(call)
+        self.wake.set()
 
         async def finish() -> None:
             await asyncio.sleep(0.15)  # let the tail of the last word arrive
             if call.recorder:
                 call.recorder.cancel()
-            self.finished_calls.append(call)
-            self.wake.set()
+            call.done.set()
 
         self._spawn(finish())
 
     async def handle_call(self, call: Call) -> None:
+        await call.done.wait()
         secs = len(call.pcm) / 2 / CALL_SAMPLE_RATE
         text = ""
         if secs >= 0.4:
@@ -219,9 +227,24 @@ class Show:
         # A quick console blip right away so the caller knows the host heard them.
         await self.speaker.play_pcm(tone(1200, 70) + tone(900, 90))
         world = await self.api.world() if self.bible.get("worldFeed") else None
-        lines = self.brain.reply_to_caller(call.callsign, text, self.summary, self.recent, world)
+        sent: list[int] = []
+
+        def escort(n: int) -> None:
+            if not sent:
+                sent.append(n)
+                self._spawn(self._send_escorts(call, n))
+
+        lines = self.brain.reply_to_caller(call.callsign, text, self.summary, self.recent, world, on_escort=escort)
         await self.speaker.speak(lines, on_start=self._on_air, on_done=self._aired)
+        if not sent and ASKS_FOR_ESCORT.search(text):
+            escort(1)
         await self.save(force=True)
+
+    async def _send_escorts(self, call: Call, n: int) -> None:
+        total = await self.api.escort(call.identity, max(1, min(5, n)))
+        log.info("escorts for %s: asked %d, now %s", call.callsign, n, total)
+        if total is not None:
+            self.recent.append(f"(transmitter: {call.callsign} now has {total} escort drone(s) following, max 5)")
 
     # ---------- the show ----------
 
@@ -235,7 +258,7 @@ class Show:
         await self.save()
 
     async def _drain(self) -> AsyncIterator[str]:
-        while self.pending and not self.call and self.listeners() > 0:
+        while self.pending and not self.call and not self.finished_calls and self.listeners() > 0:
             yield self.pending.popleft()
 
     async def _summarize(self) -> None:

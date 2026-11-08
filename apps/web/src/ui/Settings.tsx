@@ -122,7 +122,7 @@ function ControlsTab() {
         label="Layout"
         hint={
           s.layout === "arcade"
-            ? "The drone levels itself. W/S lean forward and back, A/D lean and slide sideways, Space/Shift up and down, the mouse turns."
+            ? "Mouse-aim: the mouse looks around (up and down too), W/S fly where you look, A/D slide sideways, Space/Shift up and down."
             : s.layout === "fpv"
               ? "Acro, nothing levels itself: W/S throttle, A/D roll, Q/E yaw, the mouse steers. Flips, dives, real FPV."
               : "Your own bindings. Pick a layout to start over from it."
@@ -205,7 +205,7 @@ function FlightTab() {
         hint={
           s.mode === "acro"
             ? "Acro: sticks spin the drone, nothing levels it for you. Flips, rolls, dives. How FPV pilots fly."
-            : "Angle: the drone levels itself, leaning moves it, the throttle keys only climb and sink. Easier, but no flips."
+            : "Angle: mouse-aim. The drone flies where you look and levels itself; throttle keys climb and sink. Easier, but no flips."
         }
       >
         <Choice value={s.mode} options={[["acro", "Acro"], ["angle", "Angle (self-level)"]]} onChange={(mode) => s.set({ mode })} />
@@ -240,7 +240,7 @@ function FlightTab() {
       <Row label="Field of view" hint="Horizontal. Wider feels smaller and faster.">
         <Slider value={s.fov} min={70} max={160} unit="°" onChange={(fov) => s.set({ fov })} />
       </Row>
-      <Row label="Angle mode max tilt">
+      <Row label="Angle mode max lean" hint="How far the drone body leans when it speeds up (the camera stays level).">
         <Slider value={s.angleMaxTilt} min={20} max={80} unit="°" onChange={(angleMaxTilt) => s.set({ angleMaxTilt })} />
       </Row>
     </>

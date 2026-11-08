@@ -34,6 +34,17 @@ html, body, #root { margin: 0; height: 100%; background: #111; color: var(--pape
   color: #23201c; mix-blend-mode: multiply;
 }
 .start-head p { margin: .5em 0 0 .2em; font: italic 400 clamp(17px, 1.6vw, 22px)/1.3 var(--serif); color: #2c2722; }
+.lore {
+  margin: 2.2vh 0 0 .2em; max-width: 520px; padding: 14px 18px 12px; border-radius: 4px;
+  background: rgba(236,227,207,.82); border: 1px solid rgba(35,32,28,.35); box-shadow: 0 10px 30px rgba(0,0,0,.25);
+  font: 400 16px/1.5 var(--serif); color: #2c2722; transform: rotate(-.4deg);
+}
+.lore p { margin: 0 0 .55em; font: inherit; color: inherit; }
+.lore b { color: #1d1a16; }
+.lore ul { margin: .2em 0 0; padding: 0; list-style: none; display: grid; gap: .3em; }
+.lore li { padding-left: 1em; text-indent: -1em; }
+.lore li::before { content: "▸ "; color: #8b3a1d; }
+@media (max-height: 820px) { .lore { font-size: 14px; padding: 10px 14px 8px; } }
 .start-settings {
   position: absolute; top: 3.5vh; right: 5vw; font: 600 17px var(--text); letter-spacing: .02em; color: #23201c;
   background: rgba(236,227,207,.55); border: 1px solid rgba(35,32,28,.35); border-radius: 6px; padding: 7px 14px; cursor: pointer;
@@ -101,6 +112,7 @@ html, body, #root { margin: 0; height: 100%; background: #111; color: var(--pape
 .valve { width: 14px; height: 14px; border-radius: 50%; background: #4b2a10; box-shadow: inset 0 0 4px #000; }
 .valve.warm { background: var(--amber); box-shadow: 0 0 12px var(--amber); animation: blink 1s ease-in-out infinite; }
 .set-error { margin-top: 12px; color: #ff9b8a; font: 15px var(--serif); }
+.escorts { color: #6fc3ff; }
 .set-fine { margin-top: 12px; font: 400 13px var(--serif); color: #8f7f66; }
 :focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
 

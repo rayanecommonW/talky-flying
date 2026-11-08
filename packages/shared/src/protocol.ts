@@ -2,6 +2,8 @@ import type { Dial } from "./radio.ts";
 import type { StationCard } from "./station.ts";
 
 export const WORLD_ROOM = "world";
+/** Escort drones a radio host can send to follow one pilot. */
+export const MAX_ESCORTS = 5;
 
 /** Client -> server */
 export type PoseMsg = { p: [number, number, number]; q: [number, number, number, number] };
@@ -26,6 +28,8 @@ export type JoinOptions = { callsign?: string };
 export type WorldFeed = {
   city: string;
   pilots: number;
+  /** Escort drones flying with pilots right now. */
+  escorts?: number;
   listenersByDial: Record<string, number>;
   hotspots: { landmark: string; pilots: string[] }[];
   recentEvents: { t: number; kind: "crash" | "join" | "leave"; callsign: string; landmark: string | null }[];

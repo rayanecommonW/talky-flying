@@ -6,6 +6,7 @@ import {
   isValidDial,
   LOCAL,
   MAX_DRONE_SPEED,
+  MAX_ESCORTS,
   MAX_TX_MS,
   randomCallsign,
   roomForDial,
@@ -25,6 +26,18 @@ import { services } from "../services.ts";
 import { Pilot, WorldState } from "./schema.ts";
 
 type Track = { lastPoseAt: number; txTimer?: { clear(): void }; tuneSeq: number };
+
+/** Where each escort flies relative to its pilot: right, up, behind (metres, pilot's heading). */
+const ESCORT_SLOTS: [number, number, number][] = [
+  [-0.9, 0.35, 1.3],
+  [0.9, 0.35, 1.3],
+  [0, 0.8, 2.1],
+  [-1.8, 0.15, 2.4],
+  [1.8, 0.15, 2.4],
+];
+const ESCORT_TICK_MS = 50;
+/** Further than this from its slot (a respawn, a teleport) and the escort just jumps there. */
+const ESCORT_SNAP = 60;
 
 function finite(xs: number[]): boolean {
   return xs.every((v) => typeof v === "number" && Number.isFinite(v));
@@ -46,10 +59,12 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.autoDispose = false;
     this.setPatchRate(50);
     services.feed = () => this.worldFeed();
+    services.escort = (owner, count) => this.addEscorts(owner, count);
+    this.setSimulationInterval((ms) => this.flyEscorts(ms / 1000), ESCORT_TICK_MS);
   }
 
   onJoin(client: Client, options: JoinOptions) {
-    const taken = new Set([...this.state.pilots.values()].map((p) => p.callsign));
+    const taken = new Set([...this.state.pilots.values()].map((p) => p.callsign.split("/")[0]));
     let callsign = isCallsign(options?.callsign) && !taken.has(options.callsign) ? options.callsign : randomCallsign();
     while (taken.has(callsign)) callsign = randomCallsign();
 
@@ -76,6 +91,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.releaseFloor(client.sessionId);
     this.state.pilots.delete(client.sessionId);
     this.track.delete(client.sessionId);
+    for (const id of this.escortsOf(client.sessionId)) this.state.pilots.delete(id);
     if (pilot) {
       services.pushEvent({ t: Date.now(), kind: "leave", callsign: pilot.callsign, landmark: services.landmarks.near(pilot.x, pilot.z)?.name ?? null });
       console.log(`[world] ${pilot.callsign} left`);
@@ -123,10 +139,80 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     client.send("respawn", { spawn, speed: msg?.speed ?? 0 });
   }
 
+  // ---------- escorts: drones a radio host sends to tag along behind a pilot. They only follow. ----------
+
+  private escortsOf(owner: string): string[] {
+    return [...this.state.pilots.entries()].filter(([, p]) => p.owner === owner).map(([id]) => id);
+  }
+
+  /** Returns how many escorts the pilot has afterwards, or null if there's no such pilot. */
+  addEscorts(owner: string, count: number): number | null {
+    const pilot = this.state.pilots.get(owner);
+    if (!pilot || pilot.owner) return null;
+    const have = this.escortsOf(owner);
+    const used = new Set(have.map((id) => Number(id.split(":").pop())));
+    let added = 0;
+    for (let slot = 0; slot < MAX_ESCORTS && added < count; slot++) {
+      if (used.has(slot)) continue;
+      const e = new Pilot();
+      e.callsign = `${pilot.callsign}/E${slot + 1}`;
+      e.owner = owner;
+      // Come in from above, so they arrive rather than pop in.
+      [e.x, e.y, e.z] = [pilot.x, pilot.y + 25, pilot.z];
+      this.state.pilots.set(`escort:${owner}:${slot}`, e);
+      added++;
+    }
+    if (added) console.log(`[world] ${pilot.callsign} got ${added} escort(s), ${have.length + added} now`);
+    return have.length + added;
+  }
+
+  private flyEscorts(dt: number) {
+    const t = Date.now() / 1000;
+    for (const [id, e] of this.state.pilots) {
+      if (!e.owner) continue;
+      const o = this.state.pilots.get(e.owner);
+      if (!o) {
+        this.state.pilots.delete(id);
+        continue;
+      }
+      const slot = Number(id.split(":").pop());
+      const [sx, sy, sz] = ESCORT_SLOTS[slot] ?? ESCORT_SLOTS[0];
+      // Pilot's heading from its quaternion: forward is -Z.
+      const fx = -2 * (o.qx * o.qz + o.qw * o.qy);
+      const fz = -(1 - 2 * (o.qx * o.qx + o.qy * o.qy));
+      const yaw = Math.atan2(-fx, -fz);
+      const c = Math.cos(yaw);
+      const s = Math.sin(yaw);
+      const bob = 0.12 * Math.sin(t * 2.1 + slot * 1.7);
+      // right = (c, 0, -s), behind = (s, 0, c)
+      const tx = o.x + sx * c + sz * s;
+      const ty = o.y + sy + bob;
+      const tz = o.z - sx * s + sz * c;
+      const d = Math.hypot(tx - e.x, ty - e.y, tz - e.z);
+      const k = d > ESCORT_SNAP ? 1 : 1 - Math.exp(-3.5 * dt);
+      const vx = (tx - e.x) * k;
+      const vz = (tz - e.z) * k;
+      e.x += vx;
+      e.y += (ty - e.y) * k;
+      e.z += vz;
+      // Face the pilot's heading, leaning into the catch-up like a real quad.
+      const v = Math.hypot(vx, vz) / Math.max(dt, 1e-3);
+      const lean = Math.min(0.5, v * 0.02) / 2;
+      const hy = yaw / 2;
+      // yaw about Y, then pitch nose-down about local X
+      const [qyy, qyw] = [Math.sin(hy), Math.cos(hy)];
+      const [qxx, qxw] = [-Math.sin(lean), Math.cos(lean)];
+      e.qx = qyw * qxx;
+      e.qy = qyy * qxw;
+      e.qz = -qyy * qxx;
+      e.qw = qyw * qxw;
+    }
+  }
+
   /** New pilots spawn near someone already flying, so LOCAL has somebody to hear. */
   private spawnNearSomeone(): [number, number, number] {
     const spawns = services.spawns;
-    const others = [...this.state.pilots.values()];
+    const others = [...this.state.pilots.values()].filter((p) => !p.owner);
     if (!others.length) return spawns[Math.floor(Math.random() * spawns.length)];
     const o = others[Math.floor(Math.random() * others.length)];
     let best = spawns[0];
@@ -222,7 +308,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
 
   private listenersOn(dial: number): number {
     let n = 0;
-    for (const p of this.state.pilots.values()) if (p.dial === dial) n++;
+    for (const p of this.state.pilots.values()) if (!p.owner && p.dial === dial) n++;
     return n;
   }
 
@@ -235,7 +321,10 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private worldFeed(): WorldFeed {
     const listenersByDial: Record<string, number> = {};
     const byLandmark = new Map<string, string[]>();
+    let pilots = 0;
     for (const p of this.state.pilots.values()) {
+      if (p.owner) continue;
+      pilots++;
       const k = dialLabel(p.dial);
       listenersByDial[k] = (listenersByDial[k] ?? 0) + 1;
       const lm = services.landmarks.near(p.x, p.z);
@@ -247,7 +336,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       .sort((a, b) => b.pilots.length - a.pilots.length);
     return {
       city: "Port Ardent",
-      pilots: this.state.pilots.size,
+      pilots,
+      escorts: [...this.state.pilots.values()].filter((p) => p.owner).length,
       listenersByDial,
       hotspots,
       recentEvents: services.events.slice(-12),

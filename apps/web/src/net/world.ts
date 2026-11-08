@@ -21,6 +21,8 @@ export type RemotePilot = {
   callsign: string;
   dial: Dial;
   tx: boolean;
+  /** Escort drones: the sessionId they follow. Empty for real pilots. */
+  owner: string;
   buf: SnapBuffer;
 };
 
@@ -62,7 +64,7 @@ export class World {
     const cb = Callbacks.get(room) as any;
     cb.onAdd("pilots", (pilot: any, id: string) => {
       if (id === room.sessionId) return;
-      const rp: RemotePilot = { id, callsign: pilot.callsign, dial: pilot.dial, tx: pilot.tx, buf: new SnapBuffer() };
+      const rp: RemotePilot = { id, callsign: pilot.callsign, dial: pilot.dial, tx: pilot.tx, owner: pilot.owner ?? "", buf: new SnapBuffer() };
       this.pilots.set(id, rp);
       const snap = () =>
         rp.buf.push({ t: performance.now(), p: [pilot.x, pilot.y, pilot.z], q: [pilot.qx, pilot.qy, pilot.qz, pilot.qw] });
@@ -106,6 +108,20 @@ export class World {
 
   crash(speed: number): void {
     this.room?.send("crash", { speed });
+  }
+
+  /** Real pilots, not counting escort drones. */
+  get humans(): number {
+    let n = 0;
+    for (const p of this.pilots.values()) if (!p.owner) n++;
+    return n;
+  }
+
+  /** Escort drones following us. */
+  get myEscorts(): number {
+    let n = 0;
+    for (const p of this.pilots.values()) if (this.room && p.owner === this.room.sessionId) n++;
+    return n;
   }
 
   get sessionId(): string {

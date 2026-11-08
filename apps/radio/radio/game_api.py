@@ -41,6 +41,16 @@ class GameApi:
         except httpx.HTTPError as e:
             log.warning("could not save transcript: %s", e)
 
+    async def escort(self, identity: str, count: int) -> int | None:
+        """Send escort drones to follow a pilot. Returns how many follow them now."""
+        try:
+            r = await self.http.post(f"{self.base}/internal/escort", headers=self.headers, json={"identity": identity, "count": count}, timeout=5)
+            r.raise_for_status()
+            return r.json().get("total")
+        except httpx.HTTPError as e:
+            log.warning("could not send escorts: %s", e)
+            return None
+
     async def world(self) -> dict[str, Any] | None:
         try:
             r = await self.http.get(f"{self.base}/internal/world", headers=self.headers, timeout=5)

@@ -56,6 +56,10 @@ export function StationGuide() {
         </button>
       </header>
       {offline && <p className="guide-note">No game server: the dial is dead air right now.</p>}
+      <p className="guide-note">
+        Every host is chasing the same story: what Verity did, and who helped. Call in with what you've found, or ask for an escort and up to
+        five drones will follow you.
+      </p>
       <div className="guide-list">
         <Entry dial={LOCAL} now={dial === LOCAL} title="Local" freq="LOCAL">
           <small>Open air. Pilots near you hear you, from where you are.</small>

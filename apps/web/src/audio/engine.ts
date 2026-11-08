@@ -80,7 +80,7 @@ export function setStatic(level: number, ms = 120): void {
   if (!ctx) return;
   const t = ctx.currentTime;
   staticGain.gain.cancelScheduledValues(t);
-  staticGain.gain.setTargetAtTime(Math.max(0, Math.min(1, level)) * 0.35, t, ms / 3000);
+  staticGain.gain.setTargetAtTime(Math.max(0, Math.min(1, level)) * 0.16, t, ms / 3000);
 }
 
 /** Sweep the static's colour while the dial turns. */
@@ -96,7 +96,7 @@ export function burst(level = 0.6, ms = 180): void {
   const g = staticGain.gain;
   const base = g.value;
   g.cancelScheduledValues(t);
-  g.setValueAtTime(level * 0.35, t);
+  g.setValueAtTime(level * 0.16, t);
   g.setTargetAtTime(base, t + ms / 1000, 0.05);
 }
 

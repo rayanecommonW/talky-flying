@@ -40,7 +40,7 @@ export function Scene({ meta }: { meta: CityMeta | null }) {
       className="scene"
       dpr={[1, 1.5]}
       gl={{ antialias: false, powerPreference: "high-performance" }}
-      camera={{ fov, near: 0.05, far: 3500 }}
+      camera={{ fov, near: 0.03, far: 3500 }}
       onCreated={({ camera }) => {
         (camera as THREE.PerspectiveCamera).fov = fov;
       }}

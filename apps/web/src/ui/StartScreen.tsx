@@ -63,7 +63,25 @@ export function StartScreen({ onSettings }: { onSettings: () => void }) {
     <div className="start">
       <header className="start-head">
         <h1>Dead Air</h1>
-        <p>Port Ardent, two winters after the front moved on.</p>
+        <p>Port Ardent, after the war.</p>
+        <section className="lore" aria-label="Story">
+          <p>
+            The war started in one night. <b>Verity</b>, the voice of the city's emergency network, read out an attack order nobody had
+            signed. Both armies believed it. By morning the bridges were down, and Verity was gone.
+          </p>
+          <p>You're one of the survivors hiding in the rubble. The streets aren't safe, so you fly a small drone instead.</p>
+          <ul>
+            <li>
+              <b>Listen.</b> Every station on the dial is piecing together what Verity did. Gather the clues.
+            </li>
+            <li>
+              <b>Talk.</b> On <i>Local</i>, survivors near you hear you through proximity chat.
+            </li>
+            <li>
+              <b>Call in.</b> Key up on a station to go on air. Ask the host for an escort and up to five drones will fly with you.
+            </li>
+          </ul>
+        </section>
         <button type="button" className="start-settings" onClick={onSettings}>
           Settings
         </button>

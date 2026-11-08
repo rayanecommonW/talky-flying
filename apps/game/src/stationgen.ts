@@ -15,10 +15,13 @@ export function mulberry32(seed: number): () => number {
 
 const pick = <T>(rand: () => number, xs: readonly T[]): T => xs[Math.floor(rand() * xs.length)];
 
-export const WORLD_BRIEF = `Port Ardent is a river city on the far side of a long war. The front moved on two winters ago.
+export const WORLD_BRIEF = `Port Ardent is a river city wrecked by a war that ended badly and not long ago.
 The old town is half rubble: collapsed upper floors, bomb holes, craters in the squares, canals full of wreckage.
-People are rebuilding. Power is rationed, bread queues are long, the black market runs on batteries and drone parts.
-The sky is full of FPV drone pilots (couriers, scavengers, scouts, kids) and every drone carries a radio.
+Survivors hide in cellars and attics; the streets aren't safe, so they fly small drones, and every drone carries a radio.
+The whole dial is piecing together one story: Verity, the trusted voice of the city's emergency network, read out a forged
+attack order (Order Nine) on the night of the Long Static, both armies believed the other struck first, and the war began.
+Verity vanished from the studio under the Cathedral. Every station has its own angle on who Verity is, where Verity went,
+and who helped. At least one of each station's topics should be about Verity.
 Radio is how the city talks: dozens of tiny stations broadcast from basements and bell towers on FM 87.5 to 108.0.
 Tone: wry, humane, darkly funny, never gory, never cruel. Real places in town include the Belfry Ruins, the Cathedral,
 Castle Gravensteen, the Drowned Quay, the Market Square crater, and the North Rail Yards.`;

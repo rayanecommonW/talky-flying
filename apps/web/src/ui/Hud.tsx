@@ -73,14 +73,16 @@ function Help() {
   const set = useGame((g) => g.set);
   const guideOpen = useGame((g) => g.guideOpen);
   const angle = s.mode === "angle";
-  const mouse = [s.mouseY === "pitch" ? "pitch" : "", s.mouseX === "yaw" ? "turn" : s.mouseX === "roll" ? "roll" : ""].filter(Boolean).join(" + ");
+  const mouse = angle
+    ? "look around, fly where you look"
+    : [s.mouseY === "pitch" ? "pitch" : "", s.mouseX === "yaw" ? "turn" : s.mouseX === "roll" ? "roll" : ""].filter(Boolean).join(" + ");
   return (
     <>
       <aside className="help help-left">
         <header>
           <b>Flying</b> <span>{s.mode === "acro" ? "acro" : "self-level"}</span>
         </header>
-        <HelpLine k={<Keys a={["pitchForward", "pitchBack"]} />}>{angle ? "forward / back" : "pitch"}</HelpLine>
+        <HelpLine k={<Keys a={["pitchForward", "pitchBack"]} />}>{angle ? "fly forward / back" : "pitch"}</HelpLine>
         <HelpLine k={<Keys a={["rollLeft", "rollRight"]} />}>{angle ? "slide left / right" : "roll"}</HelpLine>
         <HelpLine k={<Keys a={["throttleUp", "throttleDown"]} />}>{angle ? "up / down" : "throttle"}</HelpLine>
         <HelpLine k={<Keys a={["yawLeft", "yawRight"]} />}>{angle ? "turn" : "yaw"}</HelpLine>
@@ -173,6 +175,7 @@ function FlyingHud({ onSettings }: { onSettings: () => void }) {
       <div className="osd top-left">
         <div className="callsign">{g.callsign}</div>
         <div className="small">{g.offline ? "SOLO · NO SERVER" : `${g.pilots} PILOT${g.pilots === 1 ? "" : "S"} AIRBORNE`}</div>
+        {g.escorts > 0 && <div className="small escorts">{g.escorts} ESCORT{g.escorts === 1 ? "" : "S"} FOLLOWING</div>}
         {g.talkers.length > 0 && (
           <div className="talkers">
             {g.talkers.map((t) => (

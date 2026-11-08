@@ -6,14 +6,18 @@ import { burst, whoosh } from "../audio/engine.ts";
 import { session } from "../net/session.ts";
 import { useGame } from "../state/store.ts";
 import { DroneModel } from "./DroneModel.tsx";
-import { fromYawPitchRoll, hoverThrottle, initialState, rotate, settle, speed, step, takeoffThrottle, upright, type DroneState, type Vec3 } from "./flight.ts";
+import { aimDir, fromYawPitchRoll, hoverThrottle, initialState, rotate, settle, speed, step, takeoffThrottle, upright, type DroneState, type Vec3 } from "./flight.ts";
 import { onAction, readMouse, readSticks, resetSticks } from "./input.ts";
 import { settings, useSettings } from "../state/settings.ts";
 
 type Collider = ReturnType<ReturnType<typeof useRapier>["world"]["createCollider"]>;
 
-/** Collision sphere: the props of a 5" quad, a little forgiving. */
-const RADIUS = 0.2;
+/** Collision sphere: a palm-sized whoop, small enough to thread between railings and chimneys. */
+const RADIUS = 0.12;
+/** The model is drawn at this scale (DroneModel is a 5" quad). */
+const MODEL_SCALE = 0.45;
+/** Simple mode: stick past this lifts off a landed drone, under it it can land. */
+const MOVE_STICK = 0.2;
 const CRASH_SPEED = 12;
 /** A landing needs the drone upright, sinking, and nearly stopped sideways. */
 const LAND_MAX_SIDEWAYS = 9;
@@ -142,22 +146,23 @@ export function PlayerDrone({ floor }: { floor: number }) {
   function placeCamera(s: DroneState, pos: Vec3, thirdPerson: boolean) {
     const cfg = settings();
     if (thirdPerson) {
-      const flat = new THREE.Vector3(-Math.sin(s.yawAngle), 0, -Math.cos(s.yawAngle));
-      camera.position.set(pos[0] - flat.x * 1.5, pos[1] + 0.5, pos[2] - flat.z * 1.5);
-      camera.lookAt(pos[0] + flat.x * 4, pos[1] + 0.1, pos[2] + flat.z * 4);
+      // Tight chase cam, just behind the little drone, along where it's looking.
+      const [ax, ay, az] = aimDir({ yawAngle: s.yawAngle, look: cfg.mode === "angle" ? s.look : 0 });
+      camera.position.set(pos[0] - ax * 0.55, pos[1] - ay * 0.55 + 0.14, pos[2] - az * 0.55);
+      camera.lookAt(pos[0] + ax * 3, pos[1] + ay * 3 + 0.05, pos[2] + az * 3);
       return;
     }
-    camera.position.set(pos[0], pos[1] + 0.03, pos[2]);
+    camera.position.set(pos[0], pos[1] + 0.015, pos[2]);
     if (cfg.mode === "acro") {
       // FPV cameras are tilted up so the horizon sits level when the quad leans into forward flight.
       const [qx, qy, qz, qw] = s.quat;
       camQ.set(qx, qy, qz, qw);
       uptilt.setFromAxisAngle(X, (cfg.cameraTilt * Math.PI) / 180);
     } else {
-      // Self-level: feel the lean, but keep the street ahead in view.
-      const [qx, qy, qz, qw] = fromYawPitchRoll(s.yawAngle, s.tilt.pitch * 0.35, s.tilt.roll * 0.5);
+      // Mouse-aim: the camera looks where the mouse says, with only a hint of the body's roll.
+      const [qx, qy, qz, qw] = fromYawPitchRoll(s.yawAngle, -s.look, s.tilt.roll * 0.15);
       camQ.set(qx, qy, qz, qw);
-      uptilt.setFromAxisAngle(X, 0.05);
+      uptilt.identity();
     }
     camera.quaternion.copy(camQ).multiply(uptilt);
   }
@@ -236,12 +241,20 @@ export function PlayerDrone({ floor }: { floor: number }) {
     // While the video is out after a crash the quad hangs at hover (and respawns upright).
     const input = crashed ? { throttle: hoverThrottle(cfg), yaw: 0, pitch: 0, roll: 0 } : sticks;
 
-    if (landed.current && input.throttle > takeoffThrottle(cfg)) landed.current = false;
+    const angle = cfg.mode === "angle";
+    const moving = angle && (Math.abs(input.pitch) > MOVE_STICK || Math.abs(input.roll) > MOVE_STICK);
+    if (landed.current && (input.throttle > takeoffThrottle(cfg) || moving)) landed.current = false;
     const prev = drone.current.pos;
     let state: DroneState;
     let move: Vec3;
     if (landed.current) {
-      state = settle(drone.current, dt);
+      let s = drone.current;
+      if (angle && !g.settingsOpen) {
+        // Sitting on a roof you can still look around.
+        const { state: looked } = step(s, { ...input, pitch: 0, roll: 0, throttle: 0.5 }, dt, cfg, mouse);
+        s = { ...s, yawAngle: looked.yawAngle, look: looked.look };
+      }
+      state = settle(s, dt, angle);
       move = [0, -0.02, 0]; // stay in contact
     } else {
       ({ state, move } = step(drone.current, input, dt, cfg, crashed || g.settingsOpen ? undefined : mouse));
@@ -309,7 +322,7 @@ export function PlayerDrone({ floor }: { floor: number }) {
     if (landed.current && !ground) landed.current = false;
     else if (!landed.current && ground && !crashed) {
       const up = rotate(state.quat, [0, 1, 0]);
-      if (up[1] > 0.5 && vel[1] <= 0.5 && Math.hypot(vel[0], vel[2]) < LAND_MAX_SIDEWAYS && input.throttle < takeoffThrottle(cfg)) {
+      if (up[1] > 0.5 && vel[1] <= 0.5 && Math.hypot(vel[0], vel[2]) < LAND_MAX_SIDEWAYS && input.throttle < takeoffThrottle(cfg) && !moving) {
         landed.current = true;
         vel = [0, 0, 0];
         state = { ...state, rate: [0, 0, 0] };
@@ -351,14 +364,14 @@ export function PlayerDrone({ floor }: { floor: number }) {
 
     if (now - lastUi.current > 100) {
       lastUi.current = now;
-      g.set({ throttle: input.throttle, speed: speed(vel), altitude: pos[1], breakup, inRange: inRange ?? 0, pilots: session.world.pilots.size + 1, landed: landed.current });
+      g.set({ throttle: input.throttle, speed: speed(vel), altitude: pos[1], breakup, inRange: inRange ?? 0, pilots: session.world.humans + 1, escorts: session.world.myEscorts, landed: landed.current });
     } else if (Math.abs(breakup - g.breakup) > 0.05) {
       g.set({ breakup });
     }
   });
 
   return (
-    <group ref={model}>
+    <group ref={model} scale={MODEL_SCALE}>
       <DroneModel led="#3fa7ff" tx={useGame((s) => s.ptt === "on")} />
     </group>
   );

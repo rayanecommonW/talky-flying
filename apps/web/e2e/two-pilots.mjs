@@ -125,6 +125,24 @@ const replied = callIdx >= 0 && await waitFor(async () => (await transcript()).s
 check("host answered the caller on air", replied, (await transcript()).slice(callIdx + 1, callIdx + 3).map((t) => t.text).join(" / ").slice(0, 200));
 await b.screenshot({ path: `${OUT}b-fm.png` });
 
+// 9. a host sends escorts (the radio agent calls this when a caller asks): they follow A, nobody counts them as pilots
+const sid = await a.evaluate(() => window.__deadair.world.sessionId);
+const esc = await fetch(`${GAME}/internal/escort`, {
+  method: "POST",
+  headers: { authorization: `Bearer ${process.env.INTERNAL_TOKEN ?? "dev-internal-token"}`, "content-type": "application/json" },
+  body: JSON.stringify({ identity: sid, count: 9 }),
+}).then((r) => r.json());
+check("escorts capped at five", esc.total === 5, JSON.stringify(esc));
+check("A sees its escorts in the HUD", await waitFor(async () => (await text(a, ".escorts")).startsWith("5 ESCORTS"), 4000), await text(a, ".escorts"));
+check("escorts aren't counted as pilots", Number((await text(b, ".top-left .small")).match(/(\d+) PILOT/)?.[1] ?? 0) === 2, await text(b, ".top-left .small"));
+const pa = await a.evaluate(() => window.__deadair.dronePos());
+const following = await waitFor(async () => {
+  const ps = await b.evaluate(() => [...window.__deadair.world.pilots.values()].filter((p) => p.owner).map((p) => p.buf.sample(performance.now() - 150)?.p));
+  return ps.length === 5 && ps.every((p) => p && Math.hypot(p[0] - pa[0], p[1] - pa[1], p[2] - pa[2]) < 6);
+}, 8000, 300);
+check("B sees five escorts flying with A", following);
+await b.screenshot({ path: `${OUT}b-escorts.png` });
+
 // 8. back to LOCAL with L
 await a.keyboard.press("l");
 check("L returns to LOCAL", await waitFor(async () => (await text(a, ".freq")).startsWith("LOCAL"), 3000));

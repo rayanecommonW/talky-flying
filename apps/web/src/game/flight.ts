@@ -4,8 +4,9 @@
  * Acro (rate) mode, like a real FPV quad: sticks command rotation rates (Betaflight "actual"
  * rates), nothing self-levels, throttle is raw thrust along the drone's up axis, and thrust-to-weight
  * is high, so the drone flips, punches out and carries momentum.
- * Angle mode (self-level): sticks command tilt and the lean alone pushes the drone sideways; the
- * throttle only climbs or sinks, like a camera drone's position mode. Centre throttle holds altitude.
+ * Angle mode ("Simple"): mouse-aim. The mouse looks around (yaw and up/down), the pitch stick flies
+ * along where you look (so look down + forward dives), roll strafes, throttle climbs or sinks. The
+ * body leans with the acceleration for show; the camera barely rolls. Centre sticks hold position.
  */
 
 export type Vec3 = [number, number, number];
@@ -48,8 +49,8 @@ export type DroneState = {
   /** angle-mode attitude, radians */
   yawAngle: number;
   tilt: { pitch: number; roll: number };
-  /** angle mode: tilt the mouse is holding, decays back to level */
-  mouseTilt: number;
+  /** angle mode: where the pilot is looking up (+) or down (-), radians */
+  look: number;
 };
 
 export const G = 9.81;
@@ -59,10 +60,15 @@ const TILT_RESPONSE = 10;
 // Top speed ~300 km/h flat out in acro, ~180 km/h in angle mode.
 const LIN_DRAG = 0.04;
 const QUAD_DRAG = 0.01;
-/** Angle mode climb and sink rates at full throttle stick, m/s, and how fast they're reached. */
-const CLIMB_UP = 14;
-const CLIMB_DOWN = 11;
-const CLIMB_RESPONSE = 4;
+/** Angle mode: top speed along the look direction, m/s (~220 km/h), strafe share, climb and sink. */
+const VMAX = 62;
+const STRAFE = 0.8;
+const CLIMB_UP = 18;
+const CLIMB_DOWN = 24;
+/** 1/s, how hard it chases the commanded velocity, and the most the motors can pull, m/s². */
+const VEL_RESPONSE = 3.5;
+const ACC_MAX = 48;
+const LOOK_MAX = 85 * (Math.PI / 180);
 
 export const DEFAULT_PARAMS: FlightParams = {
   mode: "acro",
@@ -74,7 +80,7 @@ export const DEFAULT_PARAMS: FlightParams = {
 };
 
 export function initialState(pos: Vec3, yaw = 0): DroneState {
-  return { pos: [...pos], vel: [0, 0, 0], quat: fromYawPitchRoll(yaw, 0, 0), rate: [0, 0, 0], yawAngle: yaw, tilt: { pitch: 0, roll: 0 }, mouseTilt: 0 };
+  return { pos: [...pos], vel: [0, 0, 0], quat: fromYawPitchRoll(yaw, 0, 0), rate: [0, 0, 0], yawAngle: yaw, tilt: { pitch: 0, roll: 0 }, look: 0 };
 }
 
 /** Throttle stick position that holds altitude when level. */
@@ -142,7 +148,7 @@ export function step(
   let yawAngle = s.yawAngle;
   let tilt = s.tilt;
   let rate = s.rate;
-  let mouseTilt = s.mouseTilt;
+  let look = s.look;
 
   const g = p.gravity;
   const maxThrust = p.twr * g;
@@ -151,24 +157,36 @@ export function step(
   let acc: Vec3;
 
   if (p.mode === "angle") {
-    // Mouse: horizontal turns the drone (roll would only self-level away), vertical leans it.
     yawAngle -= actualRate(sticks.yaw, p.yawRates) * DEG * dt + mouse.yaw + mouse.roll;
-    const max = p.angleMaxTilt * DEG;
-    mouseTilt = Math.max(-max, Math.min(max, (mouseTilt + mouse.pitch) * Math.exp(-3 * dt)));
+    look = Math.max(-LOOK_MAX, Math.min(LOOK_MAX, look - mouse.pitch));
+    const cy = Math.cos(yawAngle);
+    const sy = Math.sin(yawAngle);
+    const cl = Math.cos(look);
+    const sl = Math.sin(look);
+    const aim: Vec3 = [-sy * cl, sl, -cy * cl];
+    const right: Vec3 = [cy, 0, -sy];
+    const stick = (sticks.throttle - 0.5) * 2;
+    const climb = stick * (stick > 0 ? CLIMB_UP : CLIMB_DOWN);
+    const fwd = sticks.pitch * VMAX;
+    const side = sticks.roll * VMAX * STRAFE;
+    const want: Vec3 = [aim[0] * fwd + right[0] * side, aim[1] * fwd + climb, aim[2] * fwd + right[2] * side];
+    acc = [(want[0] - v[0]) * VEL_RESPONSE, (want[1] - v[1]) * VEL_RESPONSE, (want[2] - v[2]) * VEL_RESPONSE];
+    const ah = Math.hypot(acc[0], acc[2]);
+    if (ah > ACC_MAX) acc = [(acc[0] / ah) * ACC_MAX, acc[1], (acc[2] / ah) * ACC_MAX];
+    // Rotors can only push up: going down is gravity doing the work, so it can't beat a free fall.
+    acc[1] = Math.max(-g, Math.min(ACC_MAX, acc[1]));
+    // Lean into the acceleration (and a little into the speed), for the model and the other pilots.
+    const max = Math.min(p.angleMaxTilt, 40) * DEG;
+    const lean = (a: number, vel: number) => Math.max(-max, Math.min(max, Math.atan2(a, g) + (0.35 * vel) / VMAX));
+    const flat: Vec3 = [-sy, 0, -cy];
+    const target = {
+      pitch: lean(acc[0] * flat[0] + acc[2] * flat[2], v[0] * flat[0] + v[2] * flat[2]),
+      roll: lean(acc[0] * right[0] + acc[2] * right[2], v[0] * right[0] + v[2] * right[2]),
+    };
     const k = Math.min(1, dt * TILT_RESPONSE);
-    const target = { pitch: Math.max(-max, Math.min(max, sticks.pitch * max + mouseTilt)), roll: sticks.roll * max };
     tilt = { pitch: tilt.pitch + (target.pitch - tilt.pitch) * k, roll: tilt.roll + (target.roll - tilt.roll) * k };
     quat = fromYawPitchRoll(yawAngle, tilt.pitch, tilt.roll);
     rate = [0, 0, 0];
-    // The lean pushes sideways exactly as hard as a hover-thrust rotor disc tilted that far would.
-    // Climbing doesn't add to it: the throttle is a climb-rate command, not raw thrust.
-    const up = rotate(quat, [0, 1, 0]);
-    const push = g / Math.max(up[1], 0.3);
-    const stick = (sticks.throttle - 0.5) * 2;
-    const climb = stick * (stick > 0 ? CLIMB_UP : CLIMB_DOWN);
-    const ay = Math.max(-g, Math.min(maxThrust - g, (climb - v[1]) * CLIMB_RESPONSE * 2));
-    const hdrag = LIN_DRAG + QUAD_DRAG * Math.hypot(v[0], v[2]);
-    acc = [up[0] * push - v[0] * hdrag, ay, up[2] * push - v[2] * hdrag];
   } else {
     const k = Math.min(1, dt * RATE_RESPONSE);
     const target: Vec3 = [actualRate(sticks.pitch, p.rates) * DEG, actualRate(sticks.yaw, p.yawRates) * DEG, actualRate(sticks.roll, p.rates) * DEG];
@@ -183,26 +201,27 @@ export function step(
     const fwd = rotate(quat, [0, 0, -1]);
     yawAngle = Math.atan2(-fwd[0], -fwd[2]);
     tilt = { pitch: 0, roll: 0 };
-    mouseTilt = 0;
+    look = 0;
     const up = rotate(quat, [0, 1, 0]);
     acc = [up[0] * thrust - v[0] * drag, up[1] * thrust - g - v[1] * drag, up[2] * thrust - v[2] * drag];
   }
 
   const vel: Vec3 = [v[0] + acc[0] * dt, v[1] + acc[1] * dt, v[2] + acc[2] * dt];
   const move: Vec3 = [vel[0] * dt, vel[1] * dt, vel[2] * dt];
-  return { state: { pos: s.pos, vel, quat, rate, yawAngle, tilt, mouseTilt }, move };
+  return { state: { pos: s.pos, vel, quat, rate, yawAngle, tilt, look }, move };
 }
 
 /** Level the drone keeping its heading (the "flip upright" key / turtle mode). */
-export function upright(s: DroneState): DroneState {
+export function upright(s: DroneState, keepYaw = false): DroneState {
   const fwd = rotate(s.quat, [0, 0, -1]);
-  const yaw = Math.abs(fwd[1]) > 0.98 ? s.yawAngle : Math.atan2(-fwd[0], -fwd[2]);
-  return { ...s, quat: fromYawPitchRoll(yaw, 0, 0), rate: [0, 0, 0], yawAngle: yaw, tilt: { pitch: 0, roll: 0 }, mouseTilt: 0, vel: [0, 0, 0] };
+  const yaw = keepYaw || Math.abs(fwd[1]) > 0.98 ? s.yawAngle : Math.atan2(-fwd[0], -fwd[2]);
+  return { ...s, quat: fromYawPitchRoll(yaw, 0, 0), rate: [0, 0, 0], yawAngle: yaw, tilt: { pitch: 0, roll: 0 }, vel: [0, 0, 0] };
 }
 
-/** Sitting on the ground: ease level onto the landing gear, keep heading, no motion. */
-export function settle(s: DroneState, dt: number): DroneState {
-  const lvl = upright(s);
+/** Sitting on the ground: ease level onto the landing gear, keep heading, no motion. `keepYaw` trusts
+ * yawAngle over the body (angle mode, where the mouse can still look around while landed). */
+export function settle(s: DroneState, dt: number, keepYaw = false): DroneState {
+  const lvl = upright(s, keepYaw);
   const k = 1 - Math.exp(-14 * dt);
   const a = s.quat;
   const b = lvl.quat;
@@ -214,6 +233,12 @@ export function settle(s: DroneState, dt: number): DroneState {
 /** Throttle past this lifts a landed drone off. */
 export function takeoffThrottle(p: Pick<FlightParams, "mode" | "twr">): number {
   return hoverThrottle(p) + (p.mode === "angle" ? 0.08 : 0.06);
+}
+
+/** Angle mode: where the pilot is looking, a unit vector (also where the forward stick flies). */
+export function aimDir(s: Pick<DroneState, "yawAngle" | "look">): Vec3 {
+  const cl = Math.cos(s.look);
+  return [-Math.sin(s.yawAngle) * cl, Math.sin(s.look), -Math.cos(s.yawAngle) * cl];
 }
 
 export function speed(v: Vec3): number {

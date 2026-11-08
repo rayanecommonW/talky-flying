@@ -11,6 +11,8 @@ type GameState = {
   callsign: string;
   sessionId: string;
   pilots: number;
+  /** Escort drones following us. */
+  escorts: number;
 
   dial: Dial;
   /** The dial the radio is actually connected to (lags `dial` while turning the knob). */
@@ -52,6 +54,7 @@ export const useGame = create<GameState>((set) => ({
   callsign: "",
   sessionId: "",
   pilots: 0,
+  escorts: 0,
   dial: LOCAL,
   tunedDial: null,
   station: null,

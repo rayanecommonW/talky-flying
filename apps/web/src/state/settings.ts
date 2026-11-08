@@ -56,8 +56,8 @@ const COMMON: Pick<Bindings, ButtonAction> = {
 };
 
 export const LAYOUTS: Record<Layout, { bindings: Bindings; mouseX: Settings["mouseX"]; mouseY: Settings["mouseY"]; mode: FlightMode; throttleKeys: Settings["throttleKeys"] }> = {
-  // Self-levelling: W/S lean forward and back, A/D lean sideways and slide, Space/Shift go up and
-  // down, the mouse turns. The default.
+  // Mouse-aim: the mouse looks around, W/S fly along where you look, A/D slide, Space/Shift go up and
+  // down. The default.
   arcade: {
     bindings: {
       pitchForward: ["KeyW", "ArrowUp"],
@@ -71,7 +71,7 @@ export const LAYOUTS: Record<Layout, { bindings: Bindings; mouseX: Settings["mou
       ...COMMON,
     },
     mouseX: "yaw",
-    mouseY: "off",
+    mouseY: "pitch",
     mode: "angle",
     throttleKeys: "spring",
   },
@@ -146,10 +146,10 @@ export const DEFAULT_SETTINGS: Settings = {
   angleMaxTilt: 60,
   gravity: 1.6 * 9.81,
   cameraTilt: 20,
-  fov: 130,
+  fov: 120,
   volMaster: 0.8,
   volVoice: 1,
-  volStatic: 0.35,
+  volStatic: 0.2,
   volTones: 0.5,
   speech: "local",
 };
@@ -181,11 +181,16 @@ export const useSettings = create<SettingsStore>()(
     }),
     {
       name: "deadair.settings",
-      version: 2,
+      version: 3,
       // v2 changed the layouts, flight tuning and defaults: keep only levels and personal preferences.
       migrate: (persisted, version) => {
         const p = (persisted ?? {}) as Partial<Settings>;
-        if (version >= 2) return p;
+        if (version === 2) {
+          // v3: Simple became mouse-aim (mouse looks up and down too), a tighter FOV, quieter static.
+          const v3: Partial<Settings> = { fov: DEFAULT_SETTINGS.fov, volStatic: Math.min(p.volStatic ?? 0.2, 0.2) };
+          return p.layout === "arcade" || !p.layout ? { ...p, ...v3, ...structuredClone(LAYOUTS.arcade) } : { ...p, ...v3 };
+        }
+        if (version >= 3) return p;
         const keep: (keyof Settings)[] = ["volMaster", "volVoice", "volStatic", "volTones", "speech", "mouseSens", "invertMouseY", "padMode", "padThrottle"];
         return Object.fromEntries(keep.filter((k) => k in p).map((k) => [k, p[k]]));
       },

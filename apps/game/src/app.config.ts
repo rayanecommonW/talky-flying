@@ -1,6 +1,6 @@
 import express, { type NextFunction, type Request, type Response } from "express";
 import { defineRoom, defineServer, monitor } from "colyseus";
-import { isFm, toCard, WORLD_ROOM } from "@dead-air/shared";
+import { isFm, MAX_ESCORTS, toCard, WORLD_ROOM } from "@dead-air/shared";
 import { config } from "./config.ts";
 import { services } from "./services.ts";
 import { WorldRoom } from "./rooms/WorldRoom.ts";
@@ -87,6 +87,16 @@ export default defineServer({
         services.store.addTranscript(dial, speaker.slice(0, 40), text.slice(0, 2000));
       }
       res.json({ ok: true });
+    });
+
+    // A host sends escort drones to a caller (identity = the caller's sessionId).
+    app.post("/internal/escort", internalOnly, (req, res) => {
+      const { identity, count } = req.body ?? {};
+      if (typeof identity !== "string") return void res.status(400).json({ error: "identity required" });
+      const n = Math.max(1, Math.min(MAX_ESCORTS, Math.floor(Number(count) || 1)));
+      const total = services.escort(identity, n);
+      if (total === null) return void res.status(404).json({ error: "no such pilot" });
+      res.json({ ok: true, total, max: MAX_ESCORTS });
     });
 
     app.get("/internal/world", internalOnly, (_req, res) => {

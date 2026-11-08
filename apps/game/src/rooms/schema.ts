@@ -13,6 +13,8 @@ export const Pilot = schema({
   dial: t.number().default(0),
   /** Transmitting right now (holding the floor on FM, or keyed up on LOCAL). */
   tx: t.boolean().default(false),
+  /** Escort drones: sessionId of the pilot this one follows. Empty for real pilots. */
+  owner: t.string().default(""),
 });
 export type Pilot = SchemaType<typeof Pilot>;
 

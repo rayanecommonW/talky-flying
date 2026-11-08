@@ -17,6 +17,8 @@ class Services {
   events: WorldEvent[] = [];
   /** Set by the WorldRoom so HTTP routes can read live state. */
   feed: () => WorldFeed = () => ({ city: "Port Ardent", pilots: 0, listenersByDial: {}, hotspots: [], recentEvents: [] });
+  /** Set by the WorldRoom: send `count` escort drones to follow a pilot. Returns how many follow them now, or null. */
+  escort: (sessionId: string, count: number) => number | null = () => null;
 
   pushEvent(e: WorldEvent): void {
     this.events.push(e);

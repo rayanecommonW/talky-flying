@@ -28,3 +28,22 @@ def test_system_prompt_carries_the_bible():
     p = system_prompt(bible)
     assert "Juno Brack" in p and "FM 98.3" in p and "Weather: Grey" in p
     assert "text-to-speech" in p
+
+
+def test_escort_line_is_a_signal_not_speech():
+    from radio.brain import escort_count
+
+    assert escort_count("ESCORT 3") == 3
+    assert escort_count("  escort: 2.") == 2
+    assert escort_count("I'll send an escort, 2 of them.") is None
+    assert split_lines("On their way, flyer.\nESCORT 2\nStay low.") == ["On their way, flyer.", "Stay low."]
+
+
+def test_every_host_knows_about_verity():
+    bible = {
+        "name": "Ash FM", "dial": 999, "slogan": "s", "format": "talk",
+        "host": {"name": "Ivo", "persona": "p", "quirks": ["q"]},
+        "topics": ["t"], "recurringBits": ["b"], "bannedTopics": [],
+    }
+    p = system_prompt(bible)
+    assert "Verity" in p and "escort" in p

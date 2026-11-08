@@ -77,7 +77,26 @@ test("angle: climbing doesn't add forward push (throttle is climb rate only)", (
   assert.ok(climbing.pos[1] > 50, `climbed to ${climbing.pos[1]}`);
   const top = fly(initialState([0, 30, 0]), { ...idle(ANGLE), pitch: 1 }, 15, ANGLE);
   const v = Math.hypot(top.vel[0], top.vel[2]);
-  assert.ok(v > 42 && v < 60, `angle top speed ${v} m/s`);
+  assert.ok(v > 58 && v < 63, `angle top speed ${v} m/s`);
+});
+
+test("angle: snappy, about 100 km/h in under a second", () => {
+  const s = fly(initialState([0, 30, 0]), { ...idle(ANGLE), pitch: 1 }, 1, ANGLE);
+  assert.ok(Math.hypot(...s.vel) > 27, `v=${Math.hypot(...s.vel)}`);
+});
+
+test("angle: look down with the mouse and forward dives", () => {
+  const s0 = initialState([0, 100, 0]);
+  const looked = step(s0, idle(ANGLE), 1 / 60, ANGLE, { pitch: 0.6, roll: 0, yaw: 0 }).state;
+  assert.ok(looked.look < -0.5, `look=${looked.look}`);
+  const s = fly({ ...looked, pos: [0, 100, 0] }, { ...idle(ANGLE), pitch: 1 }, 2, ANGLE);
+  assert.ok(s.pos[1] < 70, `still at y=${s.pos[1]}`);
+  assert.ok(s.pos[2] < -30, `z=${s.pos[2]}`);
+});
+
+test("angle: sinking is gravity, no faster than a free fall", () => {
+  const s = fly(initialState([0, 100, 0]), { ...idle(ANGLE), throttle: 0 }, 0.3, ANGLE);
+  assert.ok(s.vel[1] < -3 && s.vel[1] >= -ANGLE.gravity * 0.3 - 1e-6, `vy=${s.vel[1]}`);
 });
 
 test("settle levels a landed drone onto its gear and stops it", () => {

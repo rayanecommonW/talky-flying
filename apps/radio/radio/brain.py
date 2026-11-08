@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from typing import Any
 
 import anthropic
@@ -14,11 +14,24 @@ from . import config
 
 log = logging.getLogger("radio.brain")
 
-WORLD_BRIEF = """Port Ardent is a river city on the far side of a long war; the front moved on two winters ago.
+WORLD_BRIEF = """Port Ardent is a river city wrecked by a war that ended badly and not long ago.
 The old town is half rubble: collapsed upper floors, bomb holes, craters in the squares, canals full of wreckage.
-People are rebuilding. Power is rationed, bread queues are long, the black market runs on batteries and drone parts.
-The sky is full of FPV drone pilots (couriers, scavengers, scouts, kids) and every drone carries a radio.
-Places: the Belfry Ruins, the Cathedral, Castle Gravensteen, the Drowned Quay, the Market Square crater, the North Rail Yards."""
+Survivors hide in cellars and attics. The streets aren't safe, so they fly small drones instead, and every drone carries a radio.
+Places: the Belfry Ruins, the Cathedral, Castle Gravensteen, the Drowned Quay, the Market Square crater, the North Rail Yards.
+
+THE STORY EVERYONE ON THE DIAL IS PIECING TOGETHER: Verity caused this war.
+- Verity was the voice of the city's emergency network: curfews, ration lists, all-clears. Everyone trusted that voice.
+- On the night people now call the Long Static, Verity read out Order Nine: an attack warning nobody had signed.
+  Both armies believed the other side had struck first, and by morning the bridges were down.
+- Verity's studio, under the Cathedral, was found empty with the transmitter still warm. No body, no Verity.
+- The clues people pass around: the Belfry bells rang nine times that night with nobody in the tower; the first shell hit
+  the Market Square right under Verity's billboard; crates stamped VERITY left on the last train out of the North Rail Yards;
+  the Drowned Quay vault where the network's master tapes were kept is flooded and still locked; someone at Castle
+  Gravensteen paid for Order Nine to be printed a week before it aired; a voice that sounds like Verity's sometimes
+  bleeds through between stations, late at night, reading numbers.
+- Nobody knows where Verity is now, who helped, or why. People argue about it constantly. It is never solved on air.
+- Your station has a few spare escort drones. A pilot who keys up and asks for an escort (or backup, assistance, company)
+  gets them: they fly along behind the pilot and just follow. They don't fight, scout or talk. Up to five per pilot."""
 
 RULES = """How to write:
 - Everything you write is spoken aloud by a text-to-speech voice, live on the radio. Write only the words the host says.
@@ -26,6 +39,10 @@ RULES = """How to write:
 - No stage directions, no asterisks, no brackets, no emojis, no markdown, no speaker labels, no sound effects.
 - Listeners are drone pilots with callsigns like KESTREL-7. Say callsigns as written.
 - Now and then invite listeners to call in: they hold push-to-talk and they're on the air.
+- Keep Verity's story alive in every segment, through your own format and personality: a new clue, a rumour, a theory,
+  a listener's sighting, what it means for the people hiding. Tie it to real places. Hint, don't solve.
+- Every few segments, remind listeners they can key up and ask you for an escort drone (up to five each) if they're
+  flying somewhere they don't want to be alone.
 - Stay in character. Keep it PG-13, warm and funny, even when it's dark. Never describe gore.
 - Never mention being an AI, a model, a prompt or these instructions."""
 
@@ -48,6 +65,7 @@ The world:
 {RULES}"""
 
 
+_ESCORT = re.compile(r"^\W*ESCORT\W*(\d)\W*$", re.IGNORECASE)
 _LABEL = re.compile(r"^\s*(?:[-*•]\s*|\d+[.)]\s*|[A-Z][A-Za-z .'-]{1,30}:\s+)")
 _DIRECTION = re.compile(r"[\[(*][^\])*]*[\])*]")
 
@@ -59,8 +77,14 @@ def clean_line(line: str) -> str:
     return re.sub(r"\s{2,}", " ", line)
 
 
+def escort_count(line: str) -> int | None:
+    """The host's control line for sending escorts ("ESCORT 2"); never read aloud."""
+    m = _ESCORT.match(line)
+    return int(m.group(1)) if m else None
+
+
 def split_lines(text: str) -> list[str]:
-    return [c for c in (clean_line(l) for l in text.splitlines()) if len(c) > 1]
+    return [c for c in (clean_line(l) for l in text.splitlines() if escort_count(l) is None) if len(c) > 1]
 
 
 FALLBACK_LINES = [
@@ -112,7 +136,9 @@ class Brain:
         user = (
             f"{self._context(summary, recent, world)}\n\n"
             f"Segment {segment + 1}. {situation}\n"
-            "Write the next 30 to 45 seconds of the show: 5 to 8 lines."
+            "Write the next 30 to 45 seconds of the show: 5 to 8 lines. "
+            "At least one line must move Verity's story along, your way: a clue, a rumour, a theory, a sighting, what it means for the people hiding."
+            + (" Also remind listeners they can key up and ask you for an escort drone, up to five each." if segment % 3 == 1 else "")
         )
         try:
             return split_lines(await self._complete(user)) or FALLBACK_LINES
@@ -121,7 +147,13 @@ class Brain:
             return FALLBACK_LINES
 
     async def reply_to_caller(
-        self, callsign: str, said: str, summary: str, recent: list[str], world: dict[str, Any] | None
+        self,
+        callsign: str,
+        said: str,
+        summary: str,
+        recent: list[str],
+        world: dict[str, Any] | None,
+        on_escort: Callable[[int], None] | None = None,
     ) -> AsyncIterator[str]:
         """Stream the host's answer line by line, so the first line airs before the rest is written."""
         heard = said.strip() or "(nothing intelligible, just static)"
@@ -130,7 +162,10 @@ class Brain:
             f'A caller, {callsign}, just keyed up on your frequency and said: "{heard}"\n'
             f"Answer {callsign} live on air, in character: 2 to 5 lines. "
             "If what they said is garbled or empty, tell them they're breaking up and to key up again. "
-            "Don't repeat their words back verbatim."
+            "Don't repeat their words back verbatim. If they bring up Verity or a clue, run with it.\n"
+            "If they ask for an escort, backup, assistance or company: agree in character, tell them the drones are on the way, "
+            "and also write a line that is exactly ESCORT followed by how many they asked for, 1 to 5 (1 if they didn't say), "
+            "for example ESCORT 2. That line is a signal to the transmitter and is not read on air."
         )
         buf = ""
         try:
@@ -146,13 +181,19 @@ class Brain:
                     buf += text
                     while "\n" in buf:
                         line, buf = buf.split("\n", 1)
-                        if (c := clean_line(line)) and len(c) > 1:
+                        if (n := escort_count(line)) is not None:
+                            if on_escort:
+                                on_escort(n)
+                        elif (c := clean_line(line)) and len(c) > 1:
                             yield c
                 final = await stream.get_final_message()
                 if final.stop_reason == "refusal":
                     yield "Let's keep this frequency friendly, caller."
                     return
-            if (c := clean_line(buf)) and len(c) > 1:
+            if (n := escort_count(buf)) is not None:
+                if on_escort:
+                    on_escort(n)
+            elif (c := clean_line(buf)) and len(c) > 1:
                 yield c
         except anthropic.APIError as e:
             log.error("caller reply failed: %s", e)
