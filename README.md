@@ -124,6 +124,11 @@ All of these pass locally as of the last run (2026-11-08). The city loads in abo
 
 ## Deploy
 
+**Live:** https://talky-flying.vercel.app (web, Vercel) talking to one Nebius VM in eu-west1 (`dead-air`, cpu-d3 4 vCPU / 16 GB, Ubuntu 24.04) that runs the game server, LiveKit, the radio worker and Kokoro/Whisper with `docker compose`. No domain was bought: `DOMAIN=66-201-4-192.sslip.io`, so Caddy gets real Let's Encrypt certificates for `game.66-201-4-192.sslip.io` and `lk.66-201-4-192.sslip.io`. The browser e2e passes 16/16 against the live site.
+
+Updating the server: `ssh deadair@66.201.4.192`, then `cd app && git pull && docker compose -f infra/docker-compose.yml --env-file .env up -d --build`.
+
+
 - **Web → Vercel.** Deploy from the repo root (`vercel --prod`); the root `vercel.json` builds `apps/web` inside the pnpm workspace. Set `VITE_GAME_URL=https://game.<domain>` once the game server is up; without it the site runs in solo mode.
 - **Everything else → one VM** (e.g. a Nebius CPU instance with a public IP). Point `game.<domain>` and `lk.<domain>` at it, fill in `.env`, then:
   `docker compose -f infra/docker-compose.yml --env-file .env up -d --build`
