@@ -61,6 +61,19 @@ services:
     restart: unless-stopped
     volumes: [hf-cache:/home/ubuntu/.cache/huggingface/hub]
 
+  # One-shot: download the Kokoro and Whisper models into the cache volume (no-op once cached).
+  speech-init:
+    image: curlimages/curl:latest
+    restart: "no"
+    depends_on: [speech]
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        until curl -sf http://speech:8000/health; do sleep 2; done;
+        curl -sf -X POST http://speech:8000/v1/models/speaches-ai/Kokoro-82M-v1.0-ONNX;
+        curl -sf -X POST http://speech:8000/v1/models/Systran/faster-whisper-base.en;
+        echo models ready
+
 volumes:
   caddy-data:
   game-data:
