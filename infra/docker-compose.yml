@@ -1,7 +1,7 @@
 # Production stack for one VM (e.g. a Nebius CPU instance). The web client is on Vercel.
 #   cp .env.example .env   # fill in secrets
 #   docker compose -f infra/docker-compose.yml --env-file .env up -d --build
-# Add `--profile local-speech` to run Kokoro + Whisper on the box instead of ElevenLabs.
+# Kokoro + Whisper (speech) is the default voice engine; ElevenLabs is optional, chosen per listener in settings.
 services:
   caddy:
     image: caddy:2
@@ -52,12 +52,11 @@ services:
       INTERNAL_TOKEN: ${INTERNAL_TOKEN}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY}
-      SPEECH_PROVIDER: ${SPEECH_PROVIDER:-auto}
+      SPEECH_PROVIDER: ${SPEECH_PROVIDER:-local}
       LOCAL_SPEECH_URL: http://speech:8000/v1
     depends_on: [game, livekit]
 
   speech:
-    profiles: [local-speech]
     image: ghcr.io/speaches-ai/speaches:latest-cpu
     restart: unless-stopped
     volumes: [hf-cache:/home/ubuntu/.cache/huggingface/hub]

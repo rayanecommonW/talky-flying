@@ -31,8 +31,8 @@ async function pilot(callsign) {
   page.on("pageerror", (e) => console.log(`[${callsign} pageerror]`, e.message));
   page.on("console", (m) => m.type() === "error" && console.log(`[${callsign} console]`, m.text().slice(0, 200)));
   await page.goto(URL);
-  await page.fill(".start-card input", callsign);
-  await page.click(".start-card button");
+  await page.fill(".callsign-input", callsign);
+  await page.click(".power-on");
   await page.waitForSelector(".radio", { timeout: 20_000 });
   return page;
 }

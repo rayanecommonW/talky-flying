@@ -18,7 +18,7 @@ export class Voice {
 
   async token(identity: string, name: string, room: string): Promise<string> {
     const at = new AccessToken(config.livekitApiKey, config.livekitApiSecret, { identity, name, ttl: "6h" });
-    at.addGrant({ roomJoin: true, room, canPublish: true, canSubscribe: true, canPublishData: false });
+    at.addGrant({ roomJoin: true, room, canPublish: true, canSubscribe: true, canPublishData: false, canUpdateOwnMetadata: true });
     return at.toJwt();
   }
 

@@ -2,8 +2,7 @@ import { create } from "zustand";
 import { LOCAL, type Dial, type StationCard } from "@dead-air/shared";
 
 export type Phase = "start" | "connecting" | "flying" | "error";
-export type RadioStatus = "idle" | "tuning" | "acquiring" | "connecting" | "live" | "off-air";
-export type FlightMode = "angle" | "acro";
+export type RadioStatus = "idle" | "tuning" | "acquiring" | "connecting" | "live" | "off-air" | "no-signal";
 export type Talker = { id: string; callsign: string; distance: number | null; host: boolean };
 
 type GameState = {
@@ -18,6 +17,8 @@ type GameState = {
   tunedDial: Dial | null;
   station: StationCard | null;
   radio: RadioStatus;
+  /** Speech engine the station host is using right now ("local" | "elevenlabs"). */
+  hostSpeech: string | null;
   presets: StationCard[];
 
   ptt: "off" | "requesting" | "on" | "busy";
@@ -26,7 +27,11 @@ type GameState = {
   talkers: Talker[];
   inRange: number;
 
-  mode: FlightMode;
+  /** No game server: solo flight, radio has no signal. */
+  offline: boolean;
+  settingsOpen: boolean;
+  pointerLocked: boolean;
+  throttle: number;
   speed: number;
   altitude: number;
   crashedAt: number;
@@ -47,12 +52,16 @@ export const useGame = create<GameState>((set) => ({
   tunedDial: null,
   station: null,
   radio: "idle",
+  hostSpeech: null,
   presets: [],
   ptt: "off",
   floors: {},
   talkers: [],
   inRange: 0,
-  mode: "angle",
+  offline: false,
+  settingsOpen: false,
+  pointerLocked: false,
+  throttle: 0,
   speed: 0,
   altitude: 0,
   crashedAt: 0,

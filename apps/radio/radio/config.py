@@ -34,8 +34,9 @@ LOCAL_SPEECH_URL = env("LOCAL_SPEECH_URL", "http://localhost:8008/v1")
 LOCAL_TTS_MODEL = env("LOCAL_TTS_MODEL", "speaches-ai/Kokoro-82M-v1.0-ONNX")
 LOCAL_STT_MODEL = env("LOCAL_STT_MODEL", "Systran/faster-whisper-base.en")
 
-# "elevenlabs" | "local" | "auto" (ElevenLabs when a key is present, local otherwise)
-SPEECH_PROVIDER = env("SPEECH_PROVIDER", "auto")
+# Engine a show starts with: "local" | "elevenlabs" | "auto" (ElevenLabs when a key is present).
+# Listeners can switch it from the game's settings while they listen.
+SPEECH_PROVIDER = env("SPEECH_PROVIDER", "local")
 
 # Leave the room after this long with no listeners (the show stays frozen in the DB).
 IDLE_EXIT_S = float(env("IDLE_EXIT_S", "45"))

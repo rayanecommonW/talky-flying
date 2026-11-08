@@ -16,7 +16,7 @@ from . import config
 from .brain import Brain
 from .game_api import GameApi
 from .speaker import Speaker, tone
-from .speech import STT
+from .speech import Speech
 
 log = logging.getLogger("radio.show")
 
@@ -40,7 +40,7 @@ class Call:
 
 
 class Show:
-    def __init__(self, room: rtc.Room, dial: int, bible: dict[str, Any], api: GameApi, brain: Brain, speaker: Speaker, stt: STT):
+    def __init__(self, room: rtc.Room, dial: int, bible: dict[str, Any], api: GameApi, brain: Brain, speaker: Speaker, stt: Speech):
         self.room, self.dial, self.bible = room, dial, bible
         self.api, self.brain, self.speaker, self.stt = api, brain, speaker, stt
         self.segment = 0
@@ -105,7 +105,13 @@ class Show:
         def _joined(p: rtc.RemoteParticipant) -> None:
             if is_human(p):
                 log.info("listener joined: %s (%d listening)", p.name or p.identity, self.listeners())
+                self._prefer(p.attributes.get("speech"))
                 self.wake.set()
+
+        @r.on("participant_attributes_changed")
+        def _attrs(changed: dict[str, str], p: rtc.Participant) -> None:
+            if isinstance(p, rtc.RemoteParticipant) and is_human(p) and "speech" in changed:
+                self._prefer(changed["speech"])
 
         @r.on("participant_disconnected")
         def _left(p: rtc.RemoteParticipant) -> None:
@@ -146,9 +152,15 @@ class Show:
         for p in list(r.remote_participants.values()):
             if not is_human(p):
                 continue
+            self._prefer(p.attributes.get("speech"))
             for pub in p.track_publications.values():
                 if pub.kind == rtc.TrackKind.KIND_AUDIO and pub.track is not None:
                     _sub(pub.track, pub, p)
+
+    def _prefer(self, engine: str | None) -> None:
+        """Latest listener to pick a speech engine wins; the switch lands on the next line."""
+        if self.stt.prefer(engine):
+            self._spawn(self.room.local_participant.set_attributes({"speech": self.stt.name}))
 
     # ---------- callers (push-to-talk gives exact turn boundaries, no VAD needed) ----------
 

@@ -21,7 +21,8 @@ You can't hear both. Switching to FM gets you the whole city and makes you deaf 
 | **AI call-in shows** | Host talks unprompted in segments, stops the moment a caller keys up, transcribes the caller, answers on air by callsign in about 1 s, then carries on |
 | **Freeze / resume** | Show starts when the first listener tunes in, freezes when the last leaves, resumes from the exact unplayed line, with a running summary so the host remembers earlier callers |
 | **World-aware shows** | Traffic, sports and dispatch hosts read live game state (pilots by landmark, recent crashes) |
-| **Flight** | FPV drone with angle (self-level, altitude hold) and acro (rates) modes, Rapier collisions against the city, crash and respawn, chase cam, gamepad / FPV radio support |
+| **Flight** | FPV acro by default: Betaflight "actual" rates (220°/s centre, 720°/s max), thrust-to-weight 5:1, quadratic drag (top speed ~150 km/h), full 3-axis rotation, flips and rolls. The mouse is the right stick (direct body-frame pitch and roll). Angle mode (self-level, altitude hold) for beginners. Rapier collisions against the city, crash and respawn, flip-upright key, chase cam, gamepad / USB RC radio (Mode 1 or 2) |
+| **Settings** | Rebind every key (two per action, conflict-free), FPV or Arcade layouts, mouse mapping and sensitivity, spring or stay-put throttle keys, rates, power, camera uptilt and FOV, separate volume and mute for voices / static / beeps, and the station speech engine. Saved in the browser |
 | **The city** | `tools/city`: real Ghent street layout from OpenStreetMap, built headless in Blender (seeded war damage: collapsed floors, bomb holes, ~5,000 rubble piles, craters, burned cars, broken bridges), 1.2 M triangles in 17 MB, separate 145 k-triangle collision mesh. See `tools/city/README.md` |
 | **Look & sound** | Post-war city (Blender, from OpenStreetMap; procedural blockout fallback), analog FPV video breakup near walls and on crash, per-band audio (warm FM host, crunchy phone-line callers, walkie-talkie LOCAL) |
 
@@ -89,39 +90,44 @@ Prerequisites: Node 22+, pnpm, [uv](https://docs.astral.sh/uv/), `livekit-server
 pnpm install
 (cd apps/radio && uv sync)
 cp .env.example .env        # set ANTHROPIC_API_KEY; NEBIUS_* and ELEVENLABS_API_KEY are optional
-pnpm dev                    # speech (if no ElevenLabs key), LiveKit, game, radio worker, web
+pnpm dev                    # local speech (docker), LiveKit, game, radio worker, web
 open http://localhost:5173  # two tabs = two pilots
 ```
 
-**Controls.**
-- Flying: W/S pitch, A/D roll, mouse or ←/→ yaw, Space/Shift climb and descend, R angle/acro, C chase cam.
-- Radio: hold **V** (or right mouse) to talk, scroll wheel or `,` `.` to tune, `[` `]` to jump 1 MHz, **L** to switch between LOCAL and FM, 1–9 for presets, H for help.
-- Gamepad: Mode 2.
+**Controls** (defaults, all rebindable in Settings, `P` or the Settings button).
+- FPV layout (default, acro): **W/S** throttle (springs back to hover; switch to stay-put in Settings), **A/D** yaw, **mouse** pitch and roll (click the view to grab the mouse), arrows also pitch and roll. **F** flips you upright, **R** toggles self-level (angle) mode, **C** chase cam.
+- Arcade layout (angle mode): WASD moves, Q/E or mouse turns, Space/Shift up and down.
+- Radio: hold **V** (or right mouse) to talk, scroll wheel or `,` `.` to tune, `[` `]` to jump 1 MHz, **L** to switch between LOCAL and FM, 1–9 for presets. **H** hides the controls panels.
+- Gamepad or a USB RC radio: Mode 2 by default, Mode 1 in Settings; "RC throttle" for non-centring throttle sticks.
 
-Without an ElevenLabs key, voices come from Kokoro and transcription from faster-whisper, both in a local container (`ghcr.io/speaches-ai/speaches`). The code switches to ElevenLabs automatically when `ELEVENLABS_API_KEY` is set.
+**Speech engines.** Kokoro speaks and faster-whisper transcribes, both in a local container (`ghcr.io/speaches-ai/speaches`) that `pnpm dev` always starts. If `ELEVENLABS_API_KEY` is set, any listener can switch the station they're on to ElevenLabs in Settings → Station voices. The host switches at the next sentence; the last listener to choose wins. If ElevenLabs fails (no credit, bad key), that line falls back to Kokoro. The voice map only uses ElevenLabs default voices, which work on the free plan (10,000 characters a month, so Kokoro stays the default).
+
+**No server?** A production build without `VITE_GAME_URL` (or a game server that doesn't answer in 8 s) drops into solo flight: the whole city and flight model work, the radio finds no signal.
 
 ## Tests
 
 | Command | Covers |
 |---|---|
 | `cd packages/shared && pnpm test` | dial math, room names, band wrap-around |
-| `cd apps/web && pnpm test` | flight model (hover, pitch/roll/yaw directions, climb, acro, drag limit), snapshot interpolation |
-| `cd apps/radio && uv run pytest` | host-line cleanup, prompt assembly, ElevenLabs TTS/STT adapters and voice fallback (mocked HTTP) |
+| `cd apps/web && pnpm test` | flight model (Betaflight rates, hover in both modes, punch-out, a full flip in under half a second, top speed bounded, mouse rotation in body frame, flip upright), snapshot interpolation |
+| `cd apps/radio && uv run pytest` | host-line cleanup, prompt assembly, ElevenLabs TTS/STT adapters, voice fallback, engine switching and ElevenLabs-to-Kokoro fallback (mocked HTTP) |
 | `cd apps/game && pnpm test` (stack running) | join, duplicate callsigns, tune, **half-duplex floor**, LOCAL open air, pose validation, internal auth. `TEST_GENERATION=1` also invents a station via Nebius |
 | `cd apps/radio && uv run python tests/e2e_call.py 897` (stack running) | real audio: hear the host, call in with synthesized speech, host goes silent while you talk, transcript stored, host answers by callsign |
 | `cd apps/web && node e2e/two-pilots.mjs` (stack + vite running) | two headless browsers with fake microphones: proximity voice, flying, tuning, host on air, trade-off (FM pilot not heard on LOCAL), BUSY + refused floor, **caller transcribed and answered**, back to LOCAL |
-
-| `cd apps/web && node e2e/city-collide.mjs` | against the Blender city: descending stops on roofs/ground, flying into buildings crashes, respawn |
+| `cd apps/web && node e2e/fpv-flight.mjs` | the real game with default controls: acro at hover throttle, punch-out climb, pitch-and-throttle forward flight (~145 km/h), roll past inverted, flip upright |
+| `cd apps/web && node e2e/voice-switch.mjs` | start on a station picked on the home-screen dial, switch the live host to ElevenLabs and back from Settings (spends a few hundred ElevenLabs characters) |
+| `cd apps/web && node e2e/city-collide.mjs` | against the Blender city (Arcade layout): descending stops on roofs/ground, flying into buildings crashes, respawn at altitude |
+| `cd apps/web && node e2e/ui-shots.mjs /tmp/shots` | screenshots of the home screen, every Settings tab and the HUD |
 | `cd apps/web && node e2e/city-look.mjs` | loads the city, measures fps, saves FPV and chase-cam screenshots to `logs/e2e/` |
 
-All of these pass locally as of the last run. The browser e2e passed 16/16 twice back to back, and the city loads in about 7 s at 60 fps in headless Chromium.
+All of these pass locally as of the last run (2026-11-08). The city loads in about 7 s at 60 fps in headless Chromium.
 
 ## Deploy
 
-- **Web → Vercel.** Project root `apps/web`; `vercel.json` handles the pnpm workspace. Set `VITE_GAME_URL=https://game.<domain>`.
+- **Web → Vercel.** Deploy from the repo root (`vercel --prod`); the root `vercel.json` builds `apps/web` inside the pnpm workspace. Set `VITE_GAME_URL=https://game.<domain>` once the game server is up; without it the site runs in solo mode.
 - **Everything else → one VM** (e.g. a Nebius CPU instance with a public IP). Point `game.<domain>` and `lk.<domain>` at it, fill in `.env`, then:
   `docker compose -f infra/docker-compose.yml --env-file .env up -d --build`
-  Open TCP 80/443/7881 and UDP 3478 + 50000–50200. Add `--profile local-speech` to run Kokoro/Whisper on the box instead of ElevenLabs.
+  Open TCP 80/443/7881 and UDP 3478 + 50000–50200. The `speech` service (Kokoro/Whisper) runs on the box; ElevenLabs is optional.
 
 ## Scaling (designed, not built)
 
@@ -135,9 +141,10 @@ All of these pass locally as of the last run. The browser e2e passed 16/16 twice
 
 ## Known limitations
 
-- The ElevenLabs path has not been run against the live API; there was no key during development. Everything was tested end to end with the local Kokoro/Whisper path, which uses the same interface.
+- ElevenLabs was tested live on a free-plan key: TTS with every mapped voice, STT, and switching a live show. Free plans can't use library voices, so the map sticks to the default voices. The call-in e2e runs on Kokoro/Whisper to save credit.
+- Pointer lock isn't available in headless Chromium, so mouse flight is covered by the flight-model unit test rather than the browser e2e.
 - Movement is client-authoritative: a modified client can fly through walls. The server only bounds speed.
-- Kokoro on CPU synthesizes at about 2x real time. The speaker prefetches two lines ahead, so this is fine for one VM with a handful of stations. ElevenLabs Flash is the production choice.
+- Kokoro on CPU synthesizes at about 2x real time. The speaker prefetches two lines ahead, so this is fine for one VM with a handful of stations. ElevenLabs Flash sounds better but costs characters per line.
 - New pilots spawn at the spawn point nearest someone already flying, so LOCAL always has somebody to hear in a demo.
 - The radio worker measures load in shows (`MAX_SHOWS_PER_WORKER`), not host CPU. With the default CPU-based load it refused jobs whenever the machine was busy.
 - The radio worker doesn't hot-reload (LiveKit Agents removed in-process reload), so restart it after editing `apps/radio`.

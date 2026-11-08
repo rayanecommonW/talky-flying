@@ -1,0 +1,11 @@
+# Only the web client (and what it imports) is built on Vercel.
+infra
+tools
+docs
+logs
+data
+**/node_modules
+**/.venv
+**/dist
+.env
+.env.*

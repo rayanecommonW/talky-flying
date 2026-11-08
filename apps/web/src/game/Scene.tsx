@@ -6,7 +6,8 @@ import { useGame } from "../state/store.ts";
 import { City } from "./City.tsx";
 import type { CityMeta } from "./useCityMeta.ts";
 import { Effects } from "./Effects.tsx";
-import { installInput } from "./input.ts";
+import { installCanvasInput } from "./input.ts";
+import { useSettings } from "../state/settings.ts";
 import { PlayerDrone } from "./PlayerDrone.tsx";
 import { RemoteDrones } from "./RemoteDrones.tsx";
 
@@ -14,7 +15,7 @@ const SKY = "#8a8e91";
 
 function Inputs() {
   const gl = useThree((s) => s.gl);
-  useEffect(() => installInput(gl.domElement), [gl]);
+  useEffect(() => installCanvasInput(gl.domElement), [gl]);
   return null;
 }
 
@@ -31,7 +32,9 @@ function Atmosphere() {
 }
 
 export function Scene({ meta }: { meta: CityMeta | null }) {
-  const fov = useGame((s) => (s.thirdPerson ? 75 : 100));
+  const third = useGame((s) => s.thirdPerson);
+  const fpvFov = useSettings((s) => s.fov);
+  const fov = third ? 100 : fpvFov;
   return (
     <Canvas
       className="scene"
@@ -58,11 +61,14 @@ export function Scene({ meta }: { meta: CityMeta | null }) {
 }
 
 
+/** Settings give a horizontal FOV (what FPV pilots talk about); three.js wants vertical. */
 function FovSync({ fov }: { fov: number }) {
   const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera;
+  const aspect = useThree((s) => s.size.width / Math.max(1, s.size.height));
   useEffect(() => {
-    camera.fov = fov;
+    const h = (fov * Math.PI) / 180;
+    camera.fov = (2 * Math.atan(Math.tan(h / 2) / aspect) * 180) / Math.PI;
     camera.updateProjectionMatrix();
-  }, [camera, fov]);
+  }, [camera, fov, aspect]);
   return null;
 }

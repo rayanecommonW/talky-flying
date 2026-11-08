@@ -10,7 +10,11 @@ import {
 } from "@dead-air/shared";
 import { SnapBuffer } from "./interp.ts";
 
-export const GAME_URL: string = import.meta.env.VITE_GAME_URL ?? `${location.protocol}//${location.hostname}:2567`;
+/** Game server. Empty in a production build without VITE_GAME_URL: the client flies solo. */
+export const GAME_URL: string =
+  import.meta.env.VITE_GAME_URL ?? (import.meta.env.DEV ? `${location.protocol}//${location.hostname}:2567` : "");
+
+const CONNECT_TIMEOUT_MS = 8000;
 
 export type RemotePilot = {
   id: string;
@@ -31,26 +35,33 @@ type Handlers = {
 
 /** Connection to the authoritative world room: our pose out, everyone else's in. */
 export class World {
-  room!: Room;
+  room: Room | null = null;
   welcome!: WelcomeMsg;
   pilots = new Map<string, RemotePilot>();
   floors = new Map<string, string>();
   private lastPoseSent = 0;
 
+  get connected(): boolean {
+    return !!this.room;
+  }
+
   async connect(callsign: string | undefined, h: Handlers): Promise<WelcomeMsg> {
+    if (!GAME_URL) throw new Error("no game server configured");
     const client = new Client(GAME_URL);
-    this.room = await client.joinOrCreate(WORLD_ROOM, { callsign });
-    const welcome = new Promise<WelcomeMsg>((resolve) => this.room.onMessage("welcome", resolve));
-    this.room.onMessage("tuned", h.onTuned);
-    this.room.onMessage("tuning", h.onTuning);
-    this.room.onMessage("ptt", h.onPtt);
-    this.room.onMessage("respawn", (m: { spawn: [number, number, number] }) => h.onRespawn(m.spawn));
-    this.room.onLeave(h.onLeave);
+    const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error("no answer")), CONNECT_TIMEOUT_MS));
+    const room = await Promise.race([client.joinOrCreate(WORLD_ROOM, { callsign }), timeout]);
+    this.room = room;
+    const welcome = new Promise<WelcomeMsg>((resolve) => room.onMessage("welcome", resolve));
+    room.onMessage("tuned", h.onTuned);
+    room.onMessage("tuning", h.onTuning);
+    room.onMessage("ptt", h.onPtt);
+    room.onMessage("respawn", (m: { spawn: [number, number, number] }) => h.onRespawn(m.spawn));
+    room.onLeave(h.onLeave);
 
     // The room is untyped on the client; the schema lives on the server.
-    const cb = Callbacks.get(this.room) as any;
+    const cb = Callbacks.get(room) as any;
     cb.onAdd("pilots", (pilot: any, id: string) => {
-      if (id === this.room.sessionId) return;
+      if (id === room.sessionId) return;
       const rp: RemotePilot = { id, callsign: pilot.callsign, dial: pilot.dial, tx: pilot.tx, buf: new SnapBuffer() };
       this.pilots.set(id, rp);
       const snap = () =>
@@ -82,29 +93,30 @@ export class World {
   sendPose(p: [number, number, number], q: [number, number, number, number], now: number): void {
     if (now - this.lastPoseSent < 50) return;
     this.lastPoseSent = now;
-    this.room.send("pose", { p, q });
+    this.room?.send("pose", { p, q });
   }
 
   tune(dial: Dial): void {
-    this.room.send("tune", { dial });
+    this.room?.send("tune", { dial });
   }
 
   ptt(down: boolean): void {
-    this.room.send("ptt", { down });
+    this.room?.send("ptt", { down });
   }
 
   crash(speed: number): void {
-    this.room.send("crash", { speed });
+    this.room?.send("crash", { speed });
   }
 
   get sessionId(): string {
-    return this.room.sessionId;
+    return this.room?.sessionId ?? "solo";
   }
 }
 
 export async function fetchStations(): Promise<StationCard[]> {
+  if (!GAME_URL) return [];
   try {
-    const r = await fetch(`${GAME_URL}/api/stations`);
+    const r = await fetch(`${GAME_URL}/api/stations`, { signal: AbortSignal.timeout(5000) });
     return r.ok ? ((await r.json()) as StationCard[]) : [];
   } catch {
     return [];

@@ -78,7 +78,7 @@ class ElevenLabsTTS:
                 "voice_settings": {"stability": 0.45, "similarity_boost": 0.8, "style": 0.35},
             },
         ) as r:
-            if r.status_code in (400, 404, 422) and voice != DEFAULT_ELEVENLABS_VOICE:
+            if r.status_code in (400, 402, 404, 422) and voice != DEFAULT_ELEVENLABS_VOICE:
                 raise VoiceRejected(voice)
             if r.status_code != 200:
                 body = (await r.aread())[:300]
@@ -140,14 +140,60 @@ class LocalSTT:
         return str(r.json().get("text", "")).strip()
 
 
-def make_speech(http: httpx.AsyncClient) -> tuple[TTS, STT]:
-    provider = config.SPEECH_PROVIDER
-    if provider == "auto":
-        provider = "elevenlabs" if config.ELEVENLABS_API_KEY else "local"
-    if provider == "elevenlabs":
-        if not config.ELEVENLABS_API_KEY:
-            raise RuntimeError("SPEECH_PROVIDER=elevenlabs but ELEVENLABS_API_KEY is not set")
-        key = config.ELEVENLABS_API_KEY
-        return ElevenLabsTTS(key, config.ELEVENLABS_TTS_MODEL, http), ElevenLabsSTT(key, config.ELEVENLABS_STT_MODEL, http)
-    base = config.LOCAL_SPEECH_URL
-    return LocalTTS(base, config.LOCAL_TTS_MODEL, http), LocalSTT(base, config.LOCAL_STT_MODEL, http)
+class Speech:
+    """Both speech engines behind the TTS and STT interfaces, switchable while a show runs.
+
+    Listeners choose an engine in their settings (a LiveKit participant attribute); the show follows
+    the latest listener to ask. If ElevenLabs fails before producing audio (bad key, out of credit),
+    that line falls back to the local engine so the station never goes silent.
+    """
+
+    def __init__(self, http: httpx.AsyncClient, default: str | None = None):
+        base = config.LOCAL_SPEECH_URL
+        self.engines: dict[str, tuple[TTS, STT]] = {
+            "local": (LocalTTS(base, config.LOCAL_TTS_MODEL, http), LocalSTT(base, config.LOCAL_STT_MODEL, http)),
+        }
+        if config.ELEVENLABS_API_KEY:
+            key = config.ELEVENLABS_API_KEY
+            self.engines["elevenlabs"] = (
+                ElevenLabsTTS(key, config.ELEVENLABS_TTS_MODEL, http),
+                ElevenLabsSTT(key, config.ELEVENLABS_STT_MODEL, http),
+            )
+        want = default or config.SPEECH_PROVIDER
+        if want == "auto":
+            want = "elevenlabs" if "elevenlabs" in self.engines else "local"
+        self.name = want if want in self.engines else "local"
+
+    def prefer(self, name: str | None) -> bool:
+        """Switch engine. Returns True if it changed."""
+        if not name or name == self.name:
+            return False
+        if name not in self.engines:
+            log.warning("speech engine %r requested but not available (no key?); staying on %s", name, self.name)
+            return False
+        log.info("speech engine: %s -> %s", self.name, name)
+        self.name = name
+        return True
+
+    async def stream(self, text: str, archetype: str) -> AsyncIterator[bytes]:
+        tts = self.engines[self.name][0]
+        produced = False
+        try:
+            async for chunk in tts.stream(text, archetype):
+                produced = True
+                yield chunk
+        except Exception as e:
+            if produced or self.name == "local":
+                raise
+            log.error("%s TTS failed (%s); speaking this line with the local engine", self.name, e)
+            async for chunk in self.engines["local"][0].stream(text, archetype):
+                yield chunk
+
+    async def transcribe(self, pcm: bytes, sample_rate: int) -> str:
+        try:
+            return await self.engines[self.name][1].transcribe(pcm, sample_rate)
+        except Exception as e:
+            if self.name == "local":
+                raise
+            log.error("%s STT failed (%s); using the local engine", self.name, e)
+            return await self.engines["local"][1].transcribe(pcm, sample_rate)

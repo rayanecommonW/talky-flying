@@ -1,10 +1,14 @@
-/** Collision check against the Blender city: dive to the ground, then fly into buildings until a crash. */
+/** Collision check against the Blender city: dive to the ground, then fly into buildings until a crash.
+ * Uses the Arcade layout (self-levelling, Shift descends, W flies forward) so the descent is gentle. */
 import { chromium } from "playwright";
 const browser = await chromium.launch({ headless: true, args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", "--use-angle=metal"] });
 const page = await (await browser.newContext({ viewport: { width: 1000, height: 640 }, permissions: ["microphone"] })).newPage();
 await page.goto(process.env.WEB_URL ?? "http://localhost:5173");
-await page.fill(".start-card input", "ROOK-6");
-await page.click(".start-card button");
+await page.click(".start-settings");
+await page.click(".choice button:has-text('Arcade')");
+await page.click(".nav-foot .close");
+await page.fill(".callsign-input", "ROOK-6");
+await page.click(".power-on");
 await page.waitForSelector(".radio");
 await page.waitForFunction(() => performance.getEntriesByType("resource").some((r) => r.name.includes("collision.glb") && r.responseEnd > 0), null, { timeout: 60000 });
 await page.waitForTimeout(5000);

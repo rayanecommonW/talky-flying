@@ -43,3 +43,38 @@ async def test_stt_sends_wav_and_strips_text():
 def test_wav_header():
     wav = pcm_to_wav(b"\x00\x00" * 10, 16_000)
     assert wav[:4] == b"RIFF" and len(wav) == 44 + 20
+
+
+async def test_speech_switches_engines_and_falls_back_to_local(monkeypatch):
+    from radio import config
+    from radio.speech import Speech
+
+    monkeypatch.setattr(config, "ELEVENLABS_API_KEY", "k")
+    calls: list[str] = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        calls.append(req.url.host)
+        if req.url.host == "api.elevenlabs.io":
+            return httpx.Response(401, json={"detail": "quota_exceeded"})
+        return httpx.Response(200, content=b"\x02\x00" * 240)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+        sp = Speech(http, default="local")
+        assert sp.name == "local"
+        assert not sp.prefer("nonsense")
+        assert sp.prefer("elevenlabs") and sp.name == "elevenlabs"
+        audio = b"".join([c async for c in sp.stream("Hello.", "warm_female")])
+    # ElevenLabs refused, the line still went out on the local engine
+    assert audio == b"\x02\x00" * 240
+    assert calls == ["api.elevenlabs.io", "localhost"]
+
+
+async def test_speech_without_key_stays_local(monkeypatch):
+    from radio import config
+    from radio.speech import Speech
+
+    monkeypatch.setattr(config, "ELEVENLABS_API_KEY", None)
+    async with httpx.AsyncClient() as http:
+        sp = Speech(http, default="elevenlabs")
+        assert sp.name == "local"
+        assert not sp.prefer("elevenlabs")

@@ -20,4 +20,5 @@ Rules for any coding agent working in this repo.
 ## Run and test
 
 - `pnpm dev` starts everything (see README). Logs in `logs/`.
-- Before calling anything done: `pnpm -r typecheck`, the unit tests, and with the stack running `apps/game` integration tests, `apps/radio/tests/e2e_call.py` and `apps/web/e2e/two-pilots.mjs`.
+- Before calling anything done: `pnpm -r typecheck`, the unit tests, and with the stack running `apps/game` integration tests, `apps/radio/tests/e2e_call.py`, `apps/web/e2e/two-pilots.mjs`, `fpv-flight.mjs` and `city-collide.mjs`.
+- ElevenLabs is a free plan (10k characters/month): run `voice-switch.mjs` only when the speech switching changed.

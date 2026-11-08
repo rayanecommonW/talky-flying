@@ -4,10 +4,30 @@
  * which layer you are on before anyone speaks.
  */
 
+import { settings, useSettings } from "../state/settings.ts";
+
 let ctx: AudioContext | null = null;
 let master: GainNode;
+/** Mixer buses: static and UI tones get their own faders so they can be turned down or off. */
+let staticBus: GainNode;
+let toneBus: GainNode;
 let staticGain: GainNode;
 let staticFilter: BiquadFilterNode;
+/** Last gain stage of every voice chain. LiveKit routes voices straight to the destination, so master applies here too. */
+const voiceGains = new Set<GainNode>();
+
+function applyLevels() {
+  if (!ctx) return;
+  const s = settings();
+  const t = ctx.currentTime;
+  master.gain.setTargetAtTime(s.volMaster, t, 0.02);
+  staticBus.gain.setTargetAtTime(s.volStatic, t, 0.02);
+  toneBus.gain.setTargetAtTime(s.volTones, t, 0.02);
+  for (const g of voiceGains) g.gain.setTargetAtTime(s.volMaster * s.volVoice, t, 0.02);
+}
+useSettings.subscribe((s, p) => {
+  if (s.volMaster !== p.volMaster || s.volVoice !== p.volVoice || s.volStatic !== p.volStatic || s.volTones !== p.volTones) applyLevels();
+});
 
 export type Band = "local" | "fm-host" | "fm-caller";
 
@@ -24,11 +44,15 @@ export async function startAudio(): Promise<AudioContext> {
   }
   ctx = new AudioContext({ latencyHint: "interactive" });
   master = ctx.createGain();
-  master.gain.value = 0.9;
   const comp = ctx.createDynamicsCompressor();
   comp.threshold.value = -14;
   comp.ratio.value = 4;
   master.connect(comp).connect(ctx.destination);
+  staticBus = ctx.createGain();
+  staticBus.connect(master);
+  toneBus = ctx.createGain();
+  toneBus.connect(master);
+  applyLevels();
 
   // Static: looped white noise through a band-pass, level driven by the radio state.
   const len = ctx.sampleRate * 2;
@@ -44,15 +68,12 @@ export async function startAudio(): Promise<AudioContext> {
   staticFilter.Q.value = 0.6;
   staticGain = ctx.createGain();
   staticGain.gain.value = 0;
-  noise.connect(staticFilter).connect(staticGain).connect(master);
+  noise.connect(staticFilter).connect(staticGain).connect(staticBus);
   noise.start();
   await ctx.resume();
   return ctx;
 }
 
-export function masterBus(): GainNode {
-  return master;
-}
 
 /** Static level 0..1. Ramps so dial turning sounds continuous. */
 export function setStatic(level: number, ms = 120): void {
@@ -105,6 +126,9 @@ export function voiceChain(band: Band): AudioNode[] {
   const peak = c.createBiquadFilter();
   peak.type = "peaking";
   const gain = c.createGain();
+  const out = c.createGain();
+  out.gain.value = settings().volMaster * settings().volVoice;
+  voiceGains.add(out);
   if (band === "fm-host") {
     // broadcast FM: wide and warm, a little compressed
     hp.frequency.value = 90;
@@ -115,7 +139,7 @@ export function voiceChain(band: Band): AudioNode[] {
     const comp = c.createDynamicsCompressor();
     comp.threshold.value = -20;
     comp.ratio.value = 3;
-    return [hp, lp, peak, makeDrive(1.3), comp, gain];
+    return [hp, lp, peak, makeDrive(1.3), comp, gain, out];
   }
   if (band === "fm-caller") {
     // callers phone in over a narrow, crunchy line
@@ -124,7 +148,7 @@ export function voiceChain(band: Band): AudioNode[] {
     peak.frequency.value = 1600;
     peak.gain.value = 6;
     gain.gain.value = 1.3;
-    return [hp, lp, peak, makeDrive(3), gain];
+    return [hp, lp, peak, makeDrive(3), gain, out];
   }
   // local: handheld walkie-talkie
   hp.frequency.value = 300;
@@ -132,7 +156,13 @@ export function voiceChain(band: Band): AudioNode[] {
   peak.frequency.value = 1900;
   peak.gain.value = 4;
   gain.gain.value = 1.6;
-  return [hp, lp, peak, makeDrive(2.2), gain];
+  return [hp, lp, peak, makeDrive(2.2), gain, out];
+}
+
+/** Forget a voice chain's output stage once its track is gone. */
+export function releaseChain(chain: AudioNode[]): void {
+  const last = chain[chain.length - 1];
+  if (last instanceof GainNode) voiceGains.delete(last);
 }
 
 export function makePanner(): PannerNode {
@@ -161,7 +191,7 @@ function beep(freqs: [number, number][], gain = 0.12): void {
     g.gain.linearRampToValueAtTime(gain, t + 0.005);
     g.gain.setValueAtTime(gain, t + ms / 1000 - 0.01);
     g.gain.linearRampToValueAtTime(0, t + ms / 1000);
-    o.connect(g).connect(master);
+    o.connect(g).connect(toneBus);
     o.start(t);
     o.stop(t + ms / 1000 + 0.01);
     t += ms / 1000;

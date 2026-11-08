@@ -16,11 +16,14 @@ import {
   Track,
   type TrackPublication,
 } from "livekit-client";
+import { settings, useSettings } from "../state/settings.ts";
+import { useGame } from "../state/store.ts";
 import { LOCAL_ENTER_RADIUS, LOCAL_EXIT_RADIUS } from "@dead-air/shared";
-import { audio, burst, makePanner, voiceChain, type Band } from "../audio/engine.ts";
+import { audio, burst, makePanner, releaseChain, voiceChain, type Band } from "../audio/engine.ts";
 
 type Peer = {
   track?: RemoteAudioTrack;
+  chain?: AudioNode[];
   panner?: PannerNode;
   band?: Band;
 };
@@ -39,7 +42,11 @@ export class Voice {
   private connectSeq = 0;
   private subscribed = new Set<string>();
 
-  constructor(private ev: VoiceEvents) {}
+  constructor(private ev: VoiceEvents) {
+    useSettings.subscribe((s, p) => {
+      if (s.speech !== p.speech) void this.sendPrefs();
+    });
+  }
 
   /** Ask for the microphone up front (from the start button) so push-to-talk is instant later. */
   async initMic(): Promise<boolean> {
@@ -61,6 +68,7 @@ export class Voice {
     this.connectSeq++;
     const r = this.room;
     this.room = null;
+    for (const p of this.peers.values()) if (p.chain) releaseChain(p.chain);
     this.peers.clear();
     this.subscribed.clear();
     if (r) await r.disconnect(false);
@@ -83,7 +91,14 @@ export class Voice {
         if (p.isAgent || p.attributes.role === "host") this.ev.onHostPresent(false, null);
       })
       .on(RoomEvent.ParticipantConnected, (p) => {
-        if (p.isAgent || p.attributes.role === "host") this.ev.onHostPresent(true, p.attributes.host ?? null);
+        if (p.isAgent || p.attributes.role === "host") {
+          this.ev.onHostPresent(true, p.attributes.host ?? null);
+          useGame.getState().set({ hostSpeech: p.attributes.speech ?? null });
+        }
+      })
+      .on(RoomEvent.ParticipantAttributesChanged, (_changed, p) => {
+        if (p !== room.localParticipant && (p.attributes.role === "host" || (p as RemoteParticipant).isAgent))
+          useGame.getState().set({ hostSpeech: p.attributes.speech ?? null });
       })
       .on(RoomEvent.TrackMuted, (pub, p) => this.onRemoteMute(pub, p, true))
       .on(RoomEvent.TrackUnmuted, (pub, p) => this.onRemoteMute(pub, p, false))
@@ -105,13 +120,26 @@ export class Voice {
       return false;
     }
     this.room = room;
+    void this.sendPrefs();
     if (this.mic) {
       await room.localParticipant.publishTrack(this.mic, { source: Track.Source.Microphone, dtx: true, red: true });
       await this.mic.mute();
     }
     const host = [...room.remoteParticipants.values()].find((p) => p.isAgent || p.attributes.role === "host");
+    useGame.getState().set({ hostSpeech: host?.attributes.speech ?? null });
     this.ev.onHostPresent(!!host, host?.attributes.host ?? null);
     return true;
+  }
+
+  /** Tell the station host which speech engine we want (it follows the latest listener to ask). */
+  async sendPrefs(): Promise<void> {
+    const room = this.room;
+    if (!room || this.local) return;
+    try {
+      await room.localParticipant.setAttributes({ speech: settings().speech });
+    } catch (e) {
+      console.warn("[voice] could not send speech preference:", e);
+    }
   }
 
   get connected(): boolean {
@@ -133,7 +161,7 @@ export class Voice {
     if (!(track instanceof RemoteAudioTrack)) return;
     const band = this.bandFor(p);
     const chain = voiceChain(band);
-    const peer: Peer = { track, band };
+    const peer: Peer = { track, band, chain };
     if (band === "local") {
       peer.panner = makePanner();
       chain.unshift(peer.panner);
@@ -154,6 +182,7 @@ export class Voice {
   private dropPeer(identity: string): void {
     const peer = this.peers.get(identity);
     peer?.track?.detach();
+    if (peer?.chain) releaseChain(peer.chain);
     this.peers.delete(identity);
   }
 

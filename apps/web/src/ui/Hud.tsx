@@ -1,4 +1,6 @@
+import type { ReactNode } from "react";
 import { dialLabel, FM_MAX, FM_MIN, isFm, LOCAL } from "@dead-air/shared";
+import { keyName, useSettings, type BindAction } from "../state/settings.ts";
 import { floorHeldByOther, useGame } from "../state/store.ts";
 
 const STATUS_TEXT: Record<string, string> = {
@@ -8,6 +10,7 @@ const STATUS_TEXT: Record<string, string> = {
   connecting: "LOCKING",
   live: "",
   "off-air": "OFF AIR",
+  "no-signal": "",
 };
 
 function DialScale({ dial }: { dial: number }) {
@@ -41,39 +44,147 @@ function Signal({ level }: { level: number }) {
   );
 }
 
-export function Hud() {
+/** Keys for an action as small keycaps, straight from the current bindings. */
+function Keys({ a, extra }: { a: BindAction | BindAction[]; extra?: string }) {
+  const bindings = useSettings((s) => s.bindings);
+  const codes = (Array.isArray(a) ? a : [a]).map((x) => bindings[x][0]).filter(Boolean);
+  return (
+    <span className="keys">
+      {codes.map((c, i) => (
+        <kbd key={i}>{keyName(c)}</kbd>
+      ))}
+      {extra && <em>{extra}</em>}
+    </span>
+  );
+}
+
+function HelpLine({ k, children }: { k: ReactNode; children: ReactNode }) {
+  return (
+    <div className="help-line">
+      {k}
+      <span>{children}</span>
+    </div>
+  );
+}
+
+/** Controls reference, split by hand: flying on the left, the radio on the right. */
+function Help() {
+  const s = useSettings();
+  const set = useGame((g) => g.set);
+  const mouse = [s.mouseY === "pitch" ? "pitch" : "", s.mouseX !== "off" ? s.mouseX : ""].filter(Boolean).join(" + ");
+  return (
+    <>
+      <aside className="help help-left">
+        <header>
+          <b>Flying</b> <span>{s.mode === "acro" ? "acro" : "self-level"}</span>
+        </header>
+        <HelpLine k={<Keys a={["throttleUp", "throttleDown"]} />}>throttle</HelpLine>
+        <HelpLine k={<Keys a={["yawLeft", "yawRight"]} />}>yaw</HelpLine>
+        <HelpLine k={<Keys a={["pitchForward", "pitchBack"]} />}>pitch</HelpLine>
+        <HelpLine k={<Keys a={["rollLeft", "rollRight"]} />}>roll</HelpLine>
+        {mouse && (
+          <HelpLine
+            k={
+              <span className="keys">
+                <em>mouse</em>
+              </span>
+            }
+          >
+            {mouse}
+          </HelpLine>
+        )}
+        <HelpLine k={<Keys a="mode" />}>{s.mode === "acro" ? "self-level mode" : "acro mode"}</HelpLine>
+        <HelpLine k={<Keys a="reset" />}>flip upright</HelpLine>
+        <HelpLine k={<Keys a="camera" />}>chase camera</HelpLine>
+      </aside>
+      <aside className="help help-right">
+        <header>
+          <b>Radio</b>
+          <button type="button" onClick={() => set({ showHelp: false })} aria-label="Hide controls">
+            Hide <kbd>{keyName(s.bindings.help[0] ?? "KeyH")}</kbd>
+          </button>
+        </header>
+        <HelpLine k={<Keys a="ptt" extra="or right mouse" />}>hold to talk</HelpLine>
+        <HelpLine k={<Keys a={["tuneDown", "tuneUp"]} extra="or wheel" />}>tune 0.1</HelpLine>
+        <HelpLine k={<Keys a={["bandDown", "bandUp"]} />}>tune 1.0</HelpLine>
+        <HelpLine k={<Keys a="local" />}>local / FM</HelpLine>
+        <HelpLine
+          k={
+            <span className="keys">
+              <kbd>1</kbd>–<kbd>9</kbd>
+            </span>
+          }
+        >
+          presets
+        </HelpLine>
+        <HelpLine k={<Keys a="settings" />}>settings</HelpLine>
+      </aside>
+    </>
+  );
+}
+
+export function Hud({ onSettings }: { onSettings: () => void }) {
   const g = useGame();
+  const mode = useSettings((s) => s.mode);
+  const mouseFlies = useSettings((s) => s.mouseX !== "off" || s.mouseY !== "off");
+  const helpKey = useSettings((s) => keyName(s.bindings.help[0] ?? "KeyH"));
   const fm = isFm(g.dial);
   const signal = g.radio === "live" ? (fm ? 4 : Math.min(5, 1 + g.inRange)) : g.radio === "off-air" ? 1 : g.radio === "connecting" ? 2 : 0;
   const status = STATUS_TEXT[g.radio] ?? "";
   const crashed = performance.now() - g.crashedAt < 1400;
 
+  let stationLine: ReactNode;
+  if (g.radio === "no-signal") stationLine = fm ? "NOTHING ON THIS FREQUENCY" : "OPEN AIR · NOBODY";
+  else if (status) stationLine = <span className="blink">{status}…</span>;
+  else if (fm) stationLine = g.station?.name ?? "—";
+  else stationLine = `OPEN AIR · ${g.inRange} IN RANGE`;
+
+  let hostLine: ReactNode = null;
+  if (g.offline) hostLine = "No game server: flying solo, nobody to hear.";
+  else if (fm && g.station)
+    hostLine = (
+      <>
+        {g.station.host} · <span className="slogan">{g.station.slogan}</span>
+      </>
+    );
+  else if (!fm) hostLine = "Proximity voice. Pilots near you, where they are.";
+
   return (
     <div className="hud">
       <div className="osd top-left">
         <div className="callsign">{g.callsign}</div>
-        <div className="small">PORT ARDENT · {g.pilots} PILOT{g.pilots === 1 ? "" : "S"} AIRBORNE</div>
+        <div className="small">{g.offline ? "SOLO · NO SERVER" : `${g.pilots} PILOT${g.pilots === 1 ? "" : "S"} AIRBORNE`}</div>
+        {g.talkers.length > 0 && (
+          <div className="talkers">
+            {g.talkers.map((t) => (
+              <div key={t.id} className={t.host ? "host" : ""}>
+                ◉ {t.host ? (g.station?.host ?? "HOST") : t.callsign}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
       <div className="osd top-right">
         <div>
-          {g.mode === "angle" ? "ANGLE" : "ACRO"} {g.thirdPerson ? "· CHASE" : ""}
+          {mode === "angle" ? "ANGLE" : "ACRO"} {g.thirdPerson ? "· CHASE" : ""}
         </div>
         <div className="small">
           {Math.round(g.speed * 3.6)} KM/H · ALT {Math.round(g.altitude)} M
         </div>
+        <div className="thr" title="throttle">
+          THR
+          <span className="thr-bar">
+            <i style={{ width: `${Math.round(g.throttle * 100)}%` }} />
+          </span>
+          {Math.round(g.throttle * 100)}%
+        </div>
+        <button type="button" className="hud-settings" onClick={onSettings}>
+          Settings
+        </button>
       </div>
       <div className="crosshair" />
       {crashed && <div className="signal-lost">SIGNAL LOST</div>}
-
-      {g.talkers.length > 0 && (
-        <div className="talkers">
-          {g.talkers.map((t) => (
-            <div key={t.id} className={t.host ? "host" : ""}>
-              ◉ {t.host ? (g.station?.host ?? "HOST") : t.callsign}
-            </div>
-          ))}
-        </div>
-      )}
+      {!g.pointerLocked && mouseFlies && !g.settingsOpen && <div className="grab">Click to take the sticks. The mouse flies the drone.</div>}
 
       <div className="radio">
         <div className="radio-top">
@@ -82,24 +193,8 @@ export function Hud() {
               {g.dial === LOCAL ? "LOCAL" : dialLabel(g.dial)}
               {fm && <span className="unit">MHz</span>}
             </div>
-            <div className="station">
-              {status ? (
-                <span className="blink">{status}…</span>
-              ) : fm ? (
-                g.station?.name ?? "—"
-              ) : (
-                `OPEN AIR · ${g.inRange} IN RANGE`
-              )}
-            </div>
-            <div className="host">
-              {fm && g.station ? (
-                <>
-                  {g.station.host} · <span className="slogan">{g.station.slogan}</span>
-                </>
-              ) : (
-                !fm && "Proximity voice. Pilots near you, where they are."
-              )}
-            </div>
+            <div className="station">{stationLine}</div>
+            <div className="host">{hostLine}</div>
           </div>
           <div className="lamps">
             <div className={`lamp tx ${g.ptt === "on" ? "lit" : ""}`}>TX</div>
@@ -119,14 +214,12 @@ export function Hud() {
         </div>
       </div>
 
-      {g.showHelp && (
-        <div className="help">
-          <b>FLY</b> W/S pitch · A/D roll · mouse or ←/→ yaw · SPACE/SHIFT climb/descend · R angle/acro · C chase cam
-          <br />
-          <b>RADIO</b> hold V or right mouse to talk · wheel or , . tune 0.1 · [ ] tune 1.0 · L local ⇄ FM · 1–9 presets · H hide
-          <br />
-          <span className="dim">Gamepad: Mode 2 sticks · A/RT talk · LB/RB tune · Y local · X mode</span>
-        </div>
+      {g.showHelp ? (
+        <Help />
+      ) : (
+        <button type="button" className="help-chip" onClick={() => g.set({ showHelp: true })}>
+          Controls <kbd>{helpKey}</kbd>
+        </button>
       )}
     </div>
   );

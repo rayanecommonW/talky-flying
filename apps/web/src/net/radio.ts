@@ -37,7 +37,12 @@ export class Radio {
     tones.click();
     void this.voice.leave();
     if (this.debounce) clearTimeout(this.debounce);
-    this.debounce = setTimeout(() => this.world.tune(dial), TUNE_DEBOUNCE_MS);
+    this.debounce = setTimeout(() => {
+      if (this.world.connected) return this.world.tune(dial);
+      // No game server: nothing to tune to, just the band's hiss.
+      this.s.set({ radio: "no-signal", tunedDial: dial });
+      setStatic(dial === LOCAL ? 0.05 : STATIC_LIVE.offAir * 0.5, 400);
+    }, TUNE_DEBOUNCE_MS);
   }
 
   step(delta: number): void {
@@ -134,7 +139,7 @@ export class Radio {
     if (this.pttHeld) return;
     this.pttHeld = true;
     const s = this.s;
-    if (!this.voice.hasMic) {
+    if (!this.voice.hasMic || s.radio === "no-signal") {
       tones.denied();
       return;
     }

@@ -9,8 +9,10 @@ pids=()
 cleanup() { kill "${pids[@]}" 2>/dev/null || true; }
 trap cleanup EXIT INT TERM
 
-if ! grep -q '^ELEVENLABS_API_KEY=.\+' .env 2>/dev/null; then
-  echo "· speech: no ElevenLabs key, starting local Kokoro + Whisper (docker, :8008)"
+# Local Kokoro + Whisper always runs: it is the default engine and the fallback when ElevenLabs
+# fails. ElevenLabs (if ELEVENLABS_API_KEY is set) is picked per listener in the game's settings.
+if command -v docker >/dev/null; then
+  echo "· speech   :8008 (Kokoro + Whisper, docker)"
   docker start dead-air-speech >/dev/null 2>&1 || docker run -d --name dead-air-speech -p 8008:8000 \
     -v dead-air-hf:/home/ubuntu/.cache/huggingface/hub ghcr.io/speaches-ai/speaches:latest-cpu >/dev/null
   until curl -sf localhost:8008/health >/dev/null; do sleep 1; done

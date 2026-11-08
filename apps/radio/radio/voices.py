@@ -2,16 +2,17 @@
 
 from .config import env
 
-# ElevenLabs premade voices. Override any of them with ELEVENLABS_VOICE_<ARCHETYPE>=<voice id>.
+# ElevenLabs default voices (usable on every plan, including free; library voices need a paid plan).
+# Override any of them with ELEVENLABS_VOICE_<ARCHETYPE>=<voice id>.
 ELEVENLABS = {
-    "gravel_male": "pNInz6obpgDQGcFmaJgB",  # Adam
-    "warm_male": "TxGEqnHWrfWFTfGW9XZX",  # Josh
-    "young_male": "yoZ06aMxZJJ28mfd3POQ",  # Sam
-    "british_male": "JBFqnCBsd6RMkjVDRZzb",  # George
-    "warm_female": "21m00Tcm4TlvDq8ikWAM",  # Rachel
-    "smoky_female": "EXAVITQu4vr4xnSDxMaL",  # Bella / Sarah
-    "bright_female": "MF3mGyEYCl7XYWbV9V6O",  # Elli
-    "british_female": "ThT5KcBeYPX3keUQqHPh",  # Dorothy
+    "gravel_male": "N2lVS1w4EtoT3dr4eOWO",  # Callum, husky
+    "warm_male": "nPczCjzI2devNBz1zQrb",  # Brian, deep and resonant
+    "young_male": "TX3LPaxmHKxFdv7VOQHJ",  # Liam, energetic
+    "british_male": "onwK4e9ZLuTAKqWW03F9",  # Daniel, steady broadcaster
+    "warm_female": "XrExE9yKIg1WjnnlVkGX",  # Matilda
+    "smoky_female": "pFZP5JQG7iQjIQuC4Bku",  # Lily, velvety
+    "bright_female": "cgSgspJ2msm6clMCkdW9",  # Jessica, bright
+    "british_female": "Xb7hH8MSUJpSbSDYk0k2",  # Alice
 }
 
 # Kokoro voices served by Speaches.

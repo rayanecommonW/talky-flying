@@ -1,17 +1,34 @@
 /**
- * Keyboard + mouse + gamepad -> stick values and radio actions.
- * Keyboard: W/S pitch, A/D roll, mouse X or arrow keys yaw, Space/Shift climb/descend.
- * Gamepad (Mode 2, also EdgeTX/OpenTX radios in USB joystick mode): left stick throttle/yaw, right stick pitch/roll.
+ * Keyboard + mouse + gamepad -> stick values and radio actions, driven by the bindings in settings.
+ * Mouse moves rotate the drone directly (like mouse-look, but on the drone's own axes) while the
+ * pointer is locked. Gamepads and USB RC radios (EdgeTX/OpenTX joystick mode) map as Mode 1 or 2.
  */
-import type { Sticks } from "./flight.ts";
+import { hoverThrottle, type MouseRot, type Sticks } from "./flight.ts";
+import { settings, useSettings, type BindAction, type ButtonAction } from "../state/settings.ts";
+import { useGame } from "../state/store.ts";
 
-const keys = new Set<string>();
-let mouseYaw = 0;
+export type Action = ButtonAction | `preset${number}`;
+type Listener = (action: Action, down: boolean) => void;
+
+const held = new Set<BindAction>();
+const listeners = new Set<Listener>();
+let codeMap = new Map<string, BindAction[]>();
+let capture: ((code: string) => void) | null = null;
+let mouseDx = 0;
+let mouseDy = 0;
 let pointerLocked = false;
 
-type Action = "ptt" | "tune+" | "tune-" | "band+" | "band-" | "local" | "mode" | "camera" | "help" | `preset${number}`;
-type Listener = (action: Action, down: boolean) => void;
-const listeners = new Set<Listener>();
+function rebuildCodeMap() {
+  const m = new Map<string, BindAction[]>();
+  for (const [action, codes] of Object.entries(settings().bindings) as [BindAction, string[]][]) {
+    for (const c of codes) m.set(c, [...(m.get(c) ?? []), action]);
+  }
+  codeMap = m;
+}
+rebuildCodeMap();
+useSettings.subscribe((s, prev) => {
+  if (s.bindings !== prev.bindings) rebuildCodeMap();
+});
 
 export function onAction(fn: Listener): () => void {
   listeners.add(fn);
@@ -22,122 +39,176 @@ function emit(a: Action, down: boolean) {
   for (const l of listeners) l(a, down);
 }
 
-const KEY_ACTIONS: Record<string, Action> = {
-  KeyV: "ptt",
-  Period: "tune+",
-  Comma: "tune-",
-  BracketRight: "band+",
-  BracketLeft: "band-",
-  KeyL: "local",
-  KeyR: "mode",
-  KeyC: "camera",
-  KeyH: "help",
-};
+const BUTTONS = new Set<string>(["ptt", "tuneUp", "tuneDown", "bandUp", "bandDown", "local", "mode", "camera", "reset", "help", "settings"]);
+
+/** The next key pressed goes to `fn` instead of the game (used by the rebinding UI). */
+export function captureNextKey(fn: ((code: string) => void) | null): void {
+  capture = fn;
+}
 
 function isTyping(e: Event) {
   const t = e.target as HTMLElement | null;
-  return !!t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA");
+  return !!t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT");
 }
 
-export function installInput(canvas: HTMLElement): () => void {
-  const down = (e: KeyboardEvent) => {
+export function isPointerLocked(): boolean {
+  return pointerLocked;
+}
+
+/** Global listeners, installed once at startup so the menus can use bindings too. */
+export function installInput(): void {
+  window.addEventListener("keydown", (e) => {
+    if (capture) {
+      e.preventDefault();
+      const fn = capture;
+      capture = null;
+      fn(e.code);
+      return;
+    }
     if (isTyping(e)) return;
-    if (["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Tab"].includes(e.code)) e.preventDefault();
+    const actions = codeMap.get(e.code) ?? [];
+    if (actions.length || ["Space", "Tab"].includes(e.code) || e.code.startsWith("Arrow")) e.preventDefault();
     if (e.repeat) return;
-    keys.add(e.code);
-    const a = KEY_ACTIONS[e.code];
-    if (a) emit(a, true);
-    if (/^Digit[1-9]$/.test(e.code)) emit(`preset${Number(e.code.slice(5))}`, true);
-  };
-  const up = (e: KeyboardEvent) => {
-    keys.delete(e.code);
-    const a = KEY_ACTIONS[e.code];
-    if (a) emit(a, false);
-  };
-  const blur = () => {
-    if (keys.has("KeyV")) emit("ptt", false);
-    keys.clear();
-  };
-  const move = (e: MouseEvent) => {
-    if (pointerLocked) mouseYaw += e.movementX;
-  };
-  const wheel = (e: WheelEvent) => {
-    emit(e.deltaY < 0 ? "tune+" : "tune-", true);
-  };
+    const menuOpen = useGame.getState().settingsOpen;
+    for (const a of actions) {
+      if (menuOpen && a !== "settings") continue;
+      held.add(a);
+      if (BUTTONS.has(a)) emit(a as ButtonAction, true);
+    }
+    if (!menuOpen && /^Digit[1-9]$/.test(e.code)) emit(`preset${Number(e.code.slice(5))}`, true);
+  });
+  window.addEventListener("keyup", (e) => {
+    for (const a of codeMap.get(e.code) ?? []) {
+      held.delete(a);
+      if (BUTTONS.has(a)) emit(a as ButtonAction, false);
+    }
+  });
+  window.addEventListener("blur", releaseAll);
+  window.addEventListener("mousemove", (e) => {
+    if (!pointerLocked) return;
+    mouseDx += e.movementX;
+    mouseDy += e.movementY;
+  });
+  window.addEventListener("mouseup", (e) => {
+    if (e.button === 2) emit("ptt", false);
+  });
+  document.addEventListener("pointerlockchange", () => {
+    pointerLocked = !!document.pointerLockElement;
+    useGame.getState().set({ pointerLocked });
+  });
+}
+
+export function releaseAll(): void {
+  if (held.has("ptt")) emit("ptt", false);
+  held.clear();
+}
+
+/** Canvas-only listeners: wheel tunes, right button talks, left click grabs the mouse. */
+export function installCanvasInput(canvas: HTMLElement): () => void {
+  const wheel = (e: WheelEvent) => emit(e.deltaY < 0 ? "tuneUp" : "tuneDown", true);
   const mouseDown = (e: MouseEvent) => {
     if (e.button === 2) emit("ptt", true);
-    else if (!pointerLocked) canvas.requestPointerLock?.();
-  };
-  const mouseUp = (e: MouseEvent) => {
-    if (e.button === 2) emit("ptt", false);
-  };
-  const lockChange = () => {
-    pointerLocked = document.pointerLockElement === canvas;
+    else if (!pointerLocked) lockPointer(canvas);
   };
   const noMenu = (e: Event) => e.preventDefault();
-
-  window.addEventListener("keydown", down);
-  window.addEventListener("keyup", up);
-  window.addEventListener("blur", blur);
-  window.addEventListener("mousemove", move);
   canvas.addEventListener("wheel", wheel, { passive: true });
   canvas.addEventListener("mousedown", mouseDown);
-  window.addEventListener("mouseup", mouseUp);
   canvas.addEventListener("contextmenu", noMenu);
-  document.addEventListener("pointerlockchange", lockChange);
   return () => {
-    window.removeEventListener("keydown", down);
-    window.removeEventListener("keyup", up);
-    window.removeEventListener("blur", blur);
-    window.removeEventListener("mousemove", move);
     canvas.removeEventListener("wheel", wheel);
     canvas.removeEventListener("mousedown", mouseDown);
-    window.removeEventListener("mouseup", mouseUp);
     canvas.removeEventListener("contextmenu", noMenu);
-    document.removeEventListener("pointerlockchange", lockChange);
   };
 }
 
-const DEADZONE = 0.08;
-const dz = (v: number) => (Math.abs(v) < DEADZONE ? 0 : (v - Math.sign(v) * DEADZONE) / (1 - DEADZONE));
-const axis = (neg: string[], pos: string[]) => (pos.some((k) => keys.has(k)) ? 1 : 0) - (neg.some((k) => keys.has(k)) ? 1 : 0);
+export function lockPointer(el?: HTMLElement | null): void {
+  const target = el ?? document.querySelector("canvas");
+  (target?.requestPointerLock as (() => Promise<void> | void) | undefined)?.call(target)?.catch?.(() => {});
+}
 
+export function unlockPointer(): void {
+  if (document.pointerLockElement) document.exitPointerLock();
+}
+
+// ---------- sticks ----------
+
+const DEADZONE = 0.06;
+const dz = (v: number) => (Math.abs(v) < DEADZONE ? 0 : (v - Math.sign(v) * DEADZONE) / (1 - DEADZONE));
+const pair = (neg: BindAction, pos: BindAction) => (held.has(pos) ? 1 : 0) - (held.has(neg) ? 1 : 0);
+const approach = (v: number, target: number, rate: number) =>
+  v < target ? Math.min(target, v + rate) : Math.max(target, v - rate);
+
+/** Keys are on/off; ramp them like a thumb on a stick so flips and turns can be feathered. */
+const KEY_STICK_RATE = 5; // full deflection in 0.2 s
+const kb = { yaw: 0, pitch: 0, roll: 0 };
+let throttle = -1; // -1 = not initialised yet
 const padButtons: boolean[] = [];
-const PAD_ACTIONS: Record<number, Action> = { 0: "ptt", 7: "ptt", 5: "tune+", 4: "tune-", 3: "local", 2: "mode", 1: "camera" };
+const PAD_ACTIONS: Record<number, ButtonAction> = { 0: "ptt", 7: "ptt", 5: "tuneUp", 4: "tuneDown", 3: "local", 2: "mode", 1: "camera", 9: "settings", 8: "reset" };
+
+/** Throttle back to hover and keyboard sticks to centre (spawn, respawn, flip upright, mode switch). */
+export function resetSticks(): void {
+  throttle = -1;
+  kb.yaw = kb.pitch = kb.roll = 0;
+}
 
 export function readSticks(dt: number): Sticks {
-  const pad = navigator.getGamepads?.().find((p) => p && p.connected) ?? null;
-  let throttle = axis(["ShiftLeft", "ShiftRight", "ArrowDown"], ["Space", "ArrowUp"]);
-  let yaw = axis(["ArrowLeft", "KeyQ"], ["ArrowRight", "KeyE"]);
-  let pitch = axis(["KeyS"], ["KeyW"]);
-  let roll = axis(["KeyA"], ["KeyD"]);
+  const s = settings();
+  const hover = hoverThrottle(s);
+  if (throttle < 0) throttle = hover;
 
-  // mouse yaw: pixels per frame -> stick, decays immediately
-  if (mouseYaw !== 0) {
-    yaw = Math.max(-1, Math.min(1, yaw + (mouseYaw / Math.max(dt, 1 / 240)) * 0.0022));
-    mouseYaw = 0;
+  kb.yaw = approach(kb.yaw, pair("yawLeft", "yawRight"), KEY_STICK_RATE * dt);
+  kb.pitch = approach(kb.pitch, pair("pitchBack", "pitchForward"), KEY_STICK_RATE * dt);
+  kb.roll = approach(kb.roll, pair("rollLeft", "rollRight"), KEY_STICK_RATE * dt);
+  const t = pair("throttleDown", "throttleUp");
+  if (s.throttleKeys === "spring") {
+    const target = t > 0 ? 1 : t < 0 ? 0 : hover;
+    throttle = approach(throttle, target, (t === 0 ? 3 : 2.2) * dt);
+  } else {
+    throttle = Math.max(0, Math.min(1, throttle + t * 0.8 * dt));
   }
+  const out: Sticks = { throttle, yaw: kb.yaw, pitch: kb.pitch, roll: kb.roll };
 
+  const pad = navigator.getGamepads?.().find((p) => p && p.connected) ?? null;
   if (pad) {
     const a = pad.axes;
-    const t = dz(-(a[1] ?? 0));
-    const y = dz(a[0] ?? 0);
-    const p = dz(-(a[3] ?? 0));
-    const r = dz(a[2] ?? 0);
-    if (t || y || p || r) {
-      throttle = t;
-      yaw = y;
-      pitch = p;
-      roll = r;
+    const [ly, lx, ry, rx] = [-(a[1] ?? 0), a[0] ?? 0, -(a[3] ?? 0), a[2] ?? 0];
+    const thr = s.padMode === 2 ? ly : ry;
+    const pitch = dz(s.padMode === 2 ? ry : ly);
+    const yaw = dz(lx);
+    const roll = dz(rx);
+    const padThrottle =
+      s.padThrottle === "radio" ? (thr + 1) / 2 : thr >= 0 ? hover + dz(thr) * (1 - hover) : hover + dz(thr) * hover;
+    // The pad takes over as soon as any stick moves; keyboard keeps working when the pad is idle.
+    if (pitch || yaw || roll || (s.padThrottle === "radio" ? Math.abs(padThrottle - hover) > 0.02 : dz(thr) !== 0)) {
+      out.pitch = pitch;
+      out.yaw = yaw;
+      out.roll = roll;
+      out.throttle = padThrottle;
+      throttle = padThrottle;
     }
     pad.buttons.forEach((b, i) => {
-      const was = padButtons[i] ?? false;
-      if (b.pressed !== was) {
+      if (b.pressed !== (padButtons[i] ?? false)) {
         padButtons[i] = b.pressed;
         const act = PAD_ACTIONS[i];
         if (act) emit(act, b.pressed);
       }
     });
   }
-  return { throttle, yaw, pitch, roll };
+  return out;
+}
+
+/** Mouse movement since the last frame as a direct rotation, radians. */
+export function readMouse(): MouseRot {
+  const s = settings();
+  const k = (s.mouseSens * Math.PI) / 180;
+  const dx = mouseDx * k;
+  const dy = mouseDy * k * (s.invertMouseY ? -1 : 1);
+  mouseDx = 0;
+  mouseDy = 0;
+  // Mouse down = nose down, like looking down.
+  return {
+    pitch: s.mouseY === "pitch" ? dy : 0,
+    roll: s.mouseX === "roll" ? dx : 0,
+    yaw: s.mouseX === "yaw" ? dx : 0,
+  };
 }
