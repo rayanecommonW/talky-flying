@@ -113,7 +113,7 @@ check("floor released", await waitFor(async () => !(await lit(b, "busy")), 4000)
 const GAME = process.env.GAME_URL ?? "http://localhost:2567";
 const dial = Math.round(Number(await text(a, ".freq").then((t) => t.replace("MHz", ""))) * 10);
 const transcript = async () =>
-  (await fetch(`${GAME}/internal/show/${dial}`, { headers: { authorization: "Bearer dev-internal-token" } }).then((r) => r.json())).transcript.filter(
+  (await fetch(`${GAME}/internal/show/${dial}`, { headers: { authorization: `Bearer ${process.env.INTERNAL_TOKEN ?? "dev-internal-token"}` } }).then((r) => r.json())).transcript.filter(
     (t) => t.t >= STARTED,
   );
 const heardCaller = await waitFor(async () => (await transcript()).some((t) => t.speaker === A), 20_000, 500);
