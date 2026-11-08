@@ -1,0 +1,4 @@
+# derived (rebuilt by build.sh); data/osm_raw.json is the committed offline cache
+build/
+data/prepared.json
+__pycache__/

@@ -1,0 +1,68 @@
+# Production stack for one VM (e.g. a Nebius CPU instance). The web client is on Vercel.
+#   cp .env.example .env   # fill in secrets
+#   docker compose -f infra/docker-compose.yml --env-file .env up -d --build
+# Add `--profile local-speech` to run Kokoro + Whisper on the box instead of ElevenLabs.
+services:
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    depends_on: [game, livekit]
+
+  game:
+    build: { context: .., dockerfile: apps/game/Dockerfile }
+    restart: unless-stopped
+    environment:
+      LIVEKIT_URL: ws://livekit:7880
+      LIVEKIT_PUBLIC_URL: wss://lk.${DOMAIN}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN}
+      NEBIUS_API_KEY: ${NEBIUS_API_KEY}
+      NEBIUS_BASE_URL: ${NEBIUS_BASE_URL}
+      MAX_ON_AIR: ${MAX_ON_AIR:-8}
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+    volumes: [game-data:/data]
+
+  livekit:
+    image: livekit/livekit-server:v1.13
+    restart: unless-stopped
+    command: ["--config", "/etc/livekit.yaml"]
+    environment:
+      LIVEKIT_KEYS: "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}"
+    volumes: [./livekit.yaml:/etc/livekit.yaml:ro]
+    ports:
+      - "7881:7881/tcp"
+      - "3478:3478/udp"
+      - "50000-50200:50000-50200/udp"
+
+  radio:
+    build: { context: ../apps/radio }
+    restart: unless-stopped
+    environment:
+      LIVEKIT_URL: ws://livekit:7880
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
+      GAME_URL: http://game:2567
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY}
+      SPEECH_PROVIDER: ${SPEECH_PROVIDER:-auto}
+      LOCAL_SPEECH_URL: http://speech:8000/v1
+    depends_on: [game, livekit]
+
+  speech:
+    profiles: [local-speech]
+    image: ghcr.io/speaches-ai/speaches:latest-cpu
+    restart: unless-stopped
+    volumes: [hf-cache:/home/ubuntu/.cache/huggingface/hub]
+
+volumes:
+  caddy-data:
+  game-data:
+  hf-cache:

@@ -1,0 +1,16 @@
+{
+  "dial": 1021,
+  "name": "The Barter Line",
+  "slogan": "Two batteries for a goat. No questions. Some questions.",
+  "format": "classifieds",
+  "host": {
+    "name": "Old Tomas",
+    "persona": "A grumpy, charming old trader who reads barter classifieds and haggles with callers live on air. He knows the value of everything in batteries and pretends he does not care about anyone, but always finds a deal for the kids.",
+    "quirks": ["prices everything in batteries", "says 'that's robbery, I'll take it'", "tells callers to 'speak up, the ear's been through a war'"],
+    "voice": "british_male"
+  },
+  "topics": ["what's for trade this week", "fair prices in batteries", "spare drone parts", "a goat that keeps being traded back", "the rules of the barter line"],
+  "recurringBits": ["The Goat Report", "Haggle Live", "Robbery of the Week"],
+  "bannedTopics": ["weapons", "drugs", "stolen medicine"],
+  "worldFeed": false
+}

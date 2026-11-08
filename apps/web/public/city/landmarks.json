@@ -1,0 +1,114 @@
+[
+ {
+  "id": "cathedral",
+  "name": "Cathedral of St. Bavo",
+  "x": 318.97,
+  "y": 89.0,
+  "z": 144.08,
+  "radius": 43.3
+ },
+ {
+  "id": "belfry",
+  "name": "Belfry Ruins",
+  "x": 174.16,
+  "y": 83.24,
+  "z": 68.54,
+  "radius": 19.6
+ },
+ {
+  "id": "st_nicholas",
+  "name": "St. Nicholas' Shell",
+  "x": 28.2,
+  "y": 76.0,
+  "z": 37.21,
+  "radius": 37.0
+ },
+ {
+  "id": "gravensteen",
+  "name": "Castle Gravensteen",
+  "x": -128.17,
+  "y": 30.0,
+  "z": -318.92,
+  "radius": 27.5
+ },
+ {
+  "id": "st_michael",
+  "name": "St. Michael's Church",
+  "x": -192.5,
+  "y": 24.0,
+  "z": 88.37,
+  "radius": 28.7
+ },
+ {
+  "id": "town_hall",
+  "name": "Hall of Records",
+  "x": 167.8,
+  "y": 13.0,
+  "z": -23.78,
+  "radius": 42.2
+ },
+ {
+  "id": "meat_hall",
+  "name": "The Meat Hall",
+  "x": -59.3,
+  "y": 16.0,
+  "z": -178.4,
+  "radius": 22.0
+ },
+ {
+  "id": "st_jacob",
+  "name": "St. Jacob's Church",
+  "x": 361.04,
+  "y": 28.1,
+  "z": -249.99,
+  "radius": 37.2
+ },
+ {
+  "id": "devils_keep",
+  "name": "The Devil's Keep",
+  "x": 421.56,
+  "y": 13.0,
+  "z": 248.6,
+  "radius": 20.0
+ },
+ {
+  "id": "drowned_quay",
+  "name": "The Drowned Quay",
+  "x": -129.71,
+  "y": 8.0,
+  "z": -46.73,
+  "radius": 70
+ },
+ {
+  "id": "market_crater",
+  "name": "Market Square Crater",
+  "x": -32.95,
+  "y": 2.0,
+  "z": -47.84,
+  "radius": 35
+ },
+ {
+  "id": "broken_bridge",
+  "name": "St. Michael's Broken Bridge",
+  "x": -136.9,
+  "y": 3.0,
+  "z": 48.86,
+  "radius": 25
+ },
+ {
+  "id": "friday_market",
+  "name": "Friday Market Barricades",
+  "x": 227.88,
+  "y": 8.0,
+  "z": -239.19,
+  "radius": 55
+ },
+ {
+  "id": "south_quays",
+  "name": "The Scheldt Locks",
+  "x": 462.76,
+  "y": 8.0,
+  "z": 422.75,
+  "radius": 60
+ }
+]

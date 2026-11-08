@@ -1,0 +1,33 @@
+{
+ "name": "Port Ardent",
+ "bounds": {
+  "min": [
+   -1600.0,
+   -4.79,
+   -1600.0
+  ],
+  "max": [
+   1600.0,
+   105.26,
+   1600.0
+  ]
+ },
+ "core": {
+  "min": [
+   -500.0,
+   0,
+   -500.0
+  ],
+  "max": [
+   500.0,
+   0,
+   500.0
+  ]
+ },
+ "triangles": 1204746,
+ "collisionTriangles": 145280,
+ "source": "OSM Ghent",
+ "attribution": "© OpenStreetMap contributors, ODbL",
+ "seed": 1945,
+ "waterLevel": -1.6
+}

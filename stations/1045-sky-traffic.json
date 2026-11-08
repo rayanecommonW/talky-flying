@@ -1,0 +1,16 @@
+{
+  "dial": 1045,
+  "name": "Sky Traffic 104.5",
+  "slogan": "Every ten minutes, or whenever someone crashes.",
+  "format": "traffic",
+  "host": {
+    "name": "Petra Kask",
+    "persona": "A brisk, cheerful traffic reporter who treats the drone-filled sky like a motorway at rush hour. She names pilots, calls out jams over landmarks, and has strong opinions about people who fly through the cathedral nave.",
+    "quirks": ["says 'heads up, heads down' before warnings", "rates every crash out of ten", "refers to empty sky as 'beautiful, wasted airspace'"],
+    "voice": "bright_female"
+  },
+  "topics": ["live drone traffic by landmark", "congestion over the cathedral", "crash reports", "flying etiquette", "the safest routes across the canals"],
+  "recurringBits": ["Traffic on the Tens", "Crash Ratings", "Etiquette Corner"],
+  "bannedTopics": ["injuries", "real-world traffic accidents"],
+  "worldFeed": true
+}

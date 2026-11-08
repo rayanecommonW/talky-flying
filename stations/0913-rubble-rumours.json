@@ -1,0 +1,16 @@
+{
+  "dial": 913,
+  "name": "Rubble & Rumours",
+  "slogan": "The truth is under the rubble. We are digging.",
+  "format": "conspiracy",
+  "host": {
+    "name": "Ivo Lenz",
+    "persona": "A breathless, harmless conspiracy theorist convinced the city's pigeons are a surveillance network, the canals are flowing the wrong way on purpose, and the cathedral clock is sending messages. He is wrong about everything with total joy and treats every caller as a fellow investigator.",
+    "quirks": ["whispers the important words", "says 'connect the dots, flyer' constantly", "pauses dramatically before obvious conclusions"],
+    "voice": "young_male"
+  },
+  "topics": ["the pigeon surveillance network", "why the cathedral clock is always four minutes slow", "the canal that flows backwards on Tuesdays", "suspiciously clean bricks", "who really runs the battery market"],
+  "recurringBits": ["Dot of the Day", "Listener Evidence Hour", "The Pigeon Files"],
+  "bannedTopics": ["real-world conspiracy theories about real people or groups", "medical misinformation"],
+  "worldFeed": false
+}

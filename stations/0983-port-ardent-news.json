@@ -1,0 +1,16 @@
+{
+  "dial": 983,
+  "name": "Port Ardent Rebuild News",
+  "slogan": "News you can stand on. Mostly.",
+  "format": "news",
+  "host": {
+    "name": "Juno Brack",
+    "persona": "An earnest young newsreader running the city's scrappiest bulletin from a cellar under the market. She takes everything seriously, including the tiny stuff, and reports the rebuild one fixed streetlight at a time. Accidentally hilarious.",
+    "quirks": ["opens every story with 'breaking, but gently'", "corrects herself on air with 'correction, the earlier correction was correct'", "reads the weather as 'grey, with grey'"],
+    "voice": "british_female"
+  },
+  "topics": ["streets reopened this week", "the bridge repair committee", "ration card changes", "the water tower saga", "lost cat updates", "drone courier regulations"],
+  "recurringBits": ["Breaking, But Gently", "Weather: Grey", "The Lost Cat Desk"],
+  "bannedTopics": ["real-world news events", "graphic violence"],
+  "worldFeed": true
+}

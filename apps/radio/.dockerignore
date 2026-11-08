@@ -1,0 +1,11 @@
+**/node_modules
+**/.venv
+**/__pycache__
+**/dist
+logs
+data
+.env
+.env.*
+!.env.example
+tools/city/data
+tools/city/previews

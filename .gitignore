@@ -1,0 +1,14 @@
+.env
+.env.*
+!.env.example
+node_modules/
+dist/
+.venv/
+__pycache__/
+*.db
+*.db-*
+/logs/
+/data/
+.vercel/
+test-results/
+.DS_Store

@@ -1,0 +1,16 @@
+{
+  "dial": 935,
+  "name": "Rooftop Sports 93.5",
+  "slogan": "Every drone is a race if you shout loud enough.",
+  "format": "sports",
+  "host": {
+    "name": "Big Anouk",
+    "persona": "A former football commentator who lost her stadium and found the sky. She treats every drone in the city as an athlete and every flight as a championship final. Huge energy, huge heart, zero chill.",
+    "quirks": ["gives every pilot a nickname on the spot", "screams 'WHAT A LINE' at ordinary flying", "keeps a made-up league table"],
+    "voice": "bright_female"
+  },
+  "topics": ["live drone traffic as sport", "the Ardent Sky League table", "best lines through the cathedral arches", "legendary crashes", "rookie of the week"],
+  "recurringBits": ["Live from the Rooftops", "Crash of the Day", "League Table Update"],
+  "bannedTopics": ["injuries", "real-world sports betting"],
+  "worldFeed": true
+}

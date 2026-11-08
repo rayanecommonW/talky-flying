@@ -1,0 +1,32 @@
+{
+  "name": "@dead-air/game",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --env-file-if-exists=../../.env src/index.ts",
+    "start": "tsx src/index.ts",
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test test/*.test.ts"
+  },
+  "dependencies": {
+    "@colyseus/schema": "^5.0.45",
+    "@colyseus/tools": "^0.18.11",
+    "@dead-air/shared": "workspace:*",
+    "better-sqlite3": "^12.4.0",
+    "colyseus": "^0.18.12",
+    "express": "^5.2.1",
+    "livekit-server-sdk": "^2.19.2",
+    "openai": "^6.0.0",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "@colyseus/sdk": "^0.18.9",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/express": "^5.0.6",
+    "@types/node": "^24.0.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.0"
+  }
+}
