@@ -71,17 +71,19 @@ function HelpLine({ k, children }: { k: ReactNode; children: ReactNode }) {
 function Help() {
   const s = useSettings();
   const set = useGame((g) => g.set);
-  const mouse = [s.mouseY === "pitch" ? "pitch" : "", s.mouseX !== "off" ? s.mouseX : ""].filter(Boolean).join(" + ");
+  const guideOpen = useGame((g) => g.guideOpen);
+  const angle = s.mode === "angle";
+  const mouse = [s.mouseY === "pitch" ? "pitch" : "", s.mouseX === "yaw" ? "turn" : s.mouseX === "roll" ? "roll" : ""].filter(Boolean).join(" + ");
   return (
     <>
       <aside className="help help-left">
         <header>
           <b>Flying</b> <span>{s.mode === "acro" ? "acro" : "self-level"}</span>
         </header>
-        <HelpLine k={<Keys a={["throttleUp", "throttleDown"]} />}>throttle</HelpLine>
-        <HelpLine k={<Keys a={["yawLeft", "yawRight"]} />}>yaw</HelpLine>
-        <HelpLine k={<Keys a={["pitchForward", "pitchBack"]} />}>pitch</HelpLine>
-        <HelpLine k={<Keys a={["rollLeft", "rollRight"]} />}>roll</HelpLine>
+        <HelpLine k={<Keys a={["pitchForward", "pitchBack"]} />}>{angle ? "forward / back" : "pitch"}</HelpLine>
+        <HelpLine k={<Keys a={["rollLeft", "rollRight"]} />}>{angle ? "slide left / right" : "roll"}</HelpLine>
+        <HelpLine k={<Keys a={["throttleUp", "throttleDown"]} />}>{angle ? "up / down" : "throttle"}</HelpLine>
+        <HelpLine k={<Keys a={["yawLeft", "yawRight"]} />}>{angle ? "turn" : "yaw"}</HelpLine>
         {mouse && (
           <HelpLine
             k={
@@ -97,7 +99,7 @@ function Help() {
         <HelpLine k={<Keys a="reset" />}>flip upright</HelpLine>
         <HelpLine k={<Keys a="camera" />}>chase camera</HelpLine>
       </aside>
-      <aside className="help help-right">
+      <aside className={`help help-right ${guideOpen ? "under-guide" : ""}`}>
         <header>
           <b>Radio</b>
           <button type="button" onClick={() => set({ showHelp: false })} aria-label="Hide controls">
@@ -108,6 +110,7 @@ function Help() {
         <HelpLine k={<Keys a={["tuneDown", "tuneUp"]} extra="or wheel" />}>tune 0.1</HelpLine>
         <HelpLine k={<Keys a={["bandDown", "bandUp"]} />}>tune 1.0</HelpLine>
         <HelpLine k={<Keys a="local" />}>local / FM</HelpLine>
+        <HelpLine k={<Keys a="guide" />}>station guide</HelpLine>
         <HelpLine
           k={
             <span className="keys">
@@ -125,9 +128,25 @@ function Help() {
 
 export function Hud({ onSettings }: { onSettings: () => void }) {
   const g = useGame();
+  if (g.intro)
+    return (
+      <div className="hud intro-card">
+        <div>
+          <b>Port Ardent</b>
+          <span>{g.callsign} · coming down</span>
+        </div>
+        <em>Any key to skip</em>
+      </div>
+    );
+  return <FlyingHud onSettings={onSettings} />;
+}
+
+function FlyingHud({ onSettings }: { onSettings: () => void }) {
+  const g = useGame();
   const mode = useSettings((s) => s.mode);
   const mouseFlies = useSettings((s) => s.mouseX !== "off" || s.mouseY !== "off");
   const helpKey = useSettings((s) => keyName(s.bindings.help[0] ?? "KeyH"));
+  const guideKey = useSettings((s) => keyName(s.bindings.guide[0] ?? "KeyB"));
   const fm = isFm(g.dial);
   const signal = g.radio === "live" ? (fm ? 4 : Math.min(5, 1 + g.inRange)) : g.radio === "off-air" ? 1 : g.radio === "connecting" ? 2 : 0;
   const status = STATUS_TEXT[g.radio] ?? "";
@@ -169,7 +188,7 @@ export function Hud({ onSettings }: { onSettings: () => void }) {
           {mode === "angle" ? "ANGLE" : "ACRO"} {g.thirdPerson ? "· CHASE" : ""}
         </div>
         <div className="small">
-          {Math.round(g.speed * 3.6)} KM/H · ALT {Math.round(g.altitude)} M
+          {g.landed ? "LANDED" : `${Math.round(g.speed * 3.6)} KM/H`} · ALT {Math.round(g.altitude)} M
         </div>
         <div className="thr" title="throttle">
           THR
@@ -178,13 +197,18 @@ export function Hud({ onSettings }: { onSettings: () => void }) {
           </span>
           {Math.round(g.throttle * 100)}%
         </div>
-        <button type="button" className="hud-settings" onClick={onSettings}>
-          Settings
-        </button>
+        <div className="hud-buttons">
+          <button type="button" className="hud-btn hud-guide" onClick={() => g.set({ guideOpen: !g.guideOpen })}>
+            Stations <kbd>{guideKey}</kbd>
+          </button>
+          <button type="button" className="hud-btn hud-settings" onClick={onSettings}>
+            Settings
+          </button>
+        </div>
       </div>
       <div className="crosshair" />
       {crashed && <div className="signal-lost">SIGNAL LOST</div>}
-      {!g.pointerLocked && mouseFlies && !g.settingsOpen && <div className="grab">Click to take the sticks. The mouse flies the drone.</div>}
+      {!g.pointerLocked && mouseFlies && !g.settingsOpen && !g.guideOpen && <div className="grab">Click to take the sticks. The mouse flies the drone.</div>}
 
       <div className="radio">
         <div className="radio-top">

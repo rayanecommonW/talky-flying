@@ -5,6 +5,7 @@ import { useCityMeta } from "./game/useCityMeta.ts";
 import { settings } from "./state/settings.ts";
 import { useGame } from "./state/store.ts";
 import { Hud } from "./ui/Hud.tsx";
+import { StationGuide } from "./ui/Guide.tsx";
 import { SettingsPanel } from "./ui/Settings.tsx";
 import { StartScreen } from "./ui/StartScreen.tsx";
 
@@ -34,6 +35,11 @@ function useControls(flying: boolean) {
         else if (action === "mode") settings().set({ mode: settings().mode === "angle" ? "acro" : "angle" });
         else if (action === "camera") g.set({ thirdPerson: !g.thirdPerson });
         else if (action === "help") g.set({ showHelp: !g.showHelp });
+        else if (action === "guide") {
+          // The guide is clicked, so it needs the mouse back.
+          if (!g.guideOpen) unlockPointer();
+          g.set({ guideOpen: !g.guideOpen });
+        }
         else if (action.startsWith("preset")) r.preset(Number(action.slice(6)));
       }),
     [flying],
@@ -43,6 +49,7 @@ function useControls(flying: boolean) {
 export function App() {
   const phase = useGame((s) => s.phase);
   const settingsOpen = useGame((s) => s.settingsOpen);
+  const guideOpen = useGame((s) => s.guideOpen && !s.intro);
   const meta = useCityMeta();
   const flying = phase === "flying";
   useControls(flying);
@@ -55,6 +62,7 @@ export function App() {
         </Suspense>
       )}
       {flying ? <Hud onSettings={open} /> : <StartScreen onSettings={open} />}
+      {flying && guideOpen && <StationGuide />}
       {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
     </>
   );

@@ -21,8 +21,10 @@ You can't hear both. Switching to FM gets you the whole city and makes you deaf 
 | **AI call-in shows** | Host talks unprompted in segments, stops the moment a caller keys up, transcribes the caller, answers on air by callsign in about 1 s, then carries on |
 | **Freeze / resume** | Show starts when the first listener tunes in, freezes when the last leaves, resumes from the exact unplayed line, with a running summary so the host remembers earlier callers |
 | **World-aware shows** | Traffic, sports and dispatch hosts read live game state (pilots by landmark, recent crashes) |
-| **Flight** | FPV acro by default: Betaflight "actual" rates (220°/s centre, 720°/s max), thrust-to-weight 5:1, quadratic drag (top speed ~150 km/h), full 3-axis rotation, flips and rolls. The mouse is the right stick (direct body-frame pitch and roll). Angle mode (self-level, altitude hold) for beginners. Rapier collisions against the city, crash and respawn, flip-upright key, chase cam, gamepad / USB RC radio (Mode 1 or 2) |
-| **Settings** | Rebind every key (two per action, conflict-free), FPV or Arcade layouts, mouse mapping and sensitivity, spring or stay-put throttle keys, rates, power, camera uptilt and FOV, separate volume and mute for voices / static / beeps, and the station speech engine. Saved in the browser |
+| **Flight** | Two modes. Self-level (default): lean to move (W/S forward and back, A/D slide sideways), Space/Shift climb and sink at a set rate without adding speed, mouse turns, ~180 km/h flat out. FPV acro: Betaflight "actual" rates (220°/s centre, 720°/s max), thrust-to-weight 5:1, flips and rolls, ~300 km/h. Gravity 1.6 g by default. Land on any roof or street and take off again. Rapier collisions against the city with a tunnelling guard and a fell-out-of-the-world rescue, crash and respawn, flip-upright key, chase cam, gamepad / USB RC radio (Mode 1 or 2) |
+| **Fly-in** | After power-on the camera starts over the whole city, drops in three cuts and swings into the drone's own camera (any key skips) |
+| **Station guide** | **B** opens a list of every station on the dial: frequency, host, what kind of show it is and what to call in about. Click one to tune there |
+| **Settings** | Rebind every key (two per action, conflict-free), Simple or FPV acro layouts, mouse mapping and sensitivity, spring or stay-put throttle keys, rates, power, gravity, camera uptilt and FOV, separate volume and mute for voices / static / beeps, and the station speech engine. Saved in the browser |
 | **The city** | `tools/city`: real Ghent street layout from OpenStreetMap, built headless in Blender (seeded war damage: collapsed floors, bomb holes, ~5,000 rubble piles, craters, burned cars, broken bridges), 1.2 M triangles in 17 MB, separate 145 k-triangle collision mesh. See `tools/city/README.md` |
 | **Look & sound** | Post-war city (Blender, from OpenStreetMap; procedural blockout fallback), analog FPV video breakup near walls and on crash, per-band audio (warm FM host, crunchy phone-line callers, walkie-talkie LOCAL) |
 
@@ -95,9 +97,10 @@ open http://localhost:5173  # two tabs = two pilots
 ```
 
 **Controls** (defaults, all rebindable in Settings, `P` or the Settings button).
-- FPV layout (default, acro): **W/S** throttle (springs back to hover; switch to stay-put in Settings), **A/D** yaw, **mouse** pitch and roll (click the view to grab the mouse), arrows also pitch and roll. **F** flips you upright, **R** toggles self-level (angle) mode, **C** chase cam.
-- Arcade layout (angle mode): WASD moves, Q/E or mouse turns, Space/Shift up and down.
-- Radio: hold **V** (or right mouse) to talk, scroll wheel or `,` `.` to tune, `[` `]` to jump 1 MHz, **L** to switch between LOCAL and FM, 1–9 for presets. **H** hides the controls panels.
+- Simple layout (default, self-level): **W/S** lean forward and back, **A/D** lean and slide left and right, **Space/Shift** up and down, **Q/E** or the **mouse** turn (click the view to grab the mouse). Hold Shift to land; Space takes off.
+- FPV acro layout: **W/S** throttle (springs back to hover; switch to stay-put in Settings), **A/D** roll, **Q/E** yaw, **mouse** yaw and pitch, arrows pitch and roll.
+- Both: **F** flips you upright, **R** switches acro and self-level, **C** chase cam.
+- Radio: hold **V** (or right mouse) to talk, scroll wheel or `,` `.` to tune, `[` `]` to jump 1 MHz, **L** to switch between LOCAL and FM, 1–9 for presets, **B** for the station guide. **H** hides the controls panels.
 - Gamepad or a USB RC radio: Mode 2 by default, Mode 1 in Settings; "RC throttle" for non-centring throttle sticks.
 
 **Speech engines.** Kokoro speaks and faster-whisper transcribes, both in a local container (`ghcr.io/speaches-ai/speaches`) that `pnpm dev` always starts. If `ELEVENLABS_API_KEY` is set, any listener can switch the station they're on to ElevenLabs in Settings → Station voices. The host switches at the next sentence; the last listener to choose wins. If ElevenLabs fails (no credit, bad key), that line falls back to Kokoro. The voice map only uses ElevenLabs default voices, which work on the free plan (10,000 characters a month, so Kokoro stays the default).
@@ -109,15 +112,15 @@ open http://localhost:5173  # two tabs = two pilots
 | Command | Covers |
 |---|---|
 | `cd packages/shared && pnpm test` | dial math, room names, band wrap-around |
-| `cd apps/web && pnpm test` | flight model (Betaflight rates, hover in both modes, punch-out, a full flip in under half a second, top speed bounded, mouse rotation in body frame, flip upright), snapshot interpolation |
+| `cd apps/web && pnpm test` | flight model (Betaflight rates, hover in both modes, punch-out, a full flip in under half a second, top speed in both modes, gravity, self-level climbing adds no forward push, mouse rotation in body frame, flip upright, landing settle), snapshot interpolation |
 | `cd apps/radio && uv run pytest` | host-line cleanup, prompt assembly, ElevenLabs TTS/STT adapters, voice fallback, engine switching and ElevenLabs-to-Kokoro fallback (mocked HTTP) |
 | `cd apps/game && pnpm test` (stack running) | join, duplicate callsigns, tune, **half-duplex floor**, LOCAL open air, pose validation, internal auth. `TEST_GENERATION=1` also invents a station via Nebius |
 | `cd apps/radio && uv run python tests/e2e_call.py 897` (stack running) | real audio: hear the host, call in with synthesized speech, host goes silent while you talk, transcript stored, host answers by callsign |
 | `cd apps/web && node e2e/two-pilots.mjs` (stack + vite running) | two headless browsers with fake microphones: proximity voice, flying, tuning, host on air, trade-off (FM pilot not heard on LOCAL), BUSY + refused floor, **caller transcribed and answered**, back to LOCAL |
-| `cd apps/web && node e2e/fpv-flight.mjs` | the real game with default controls: acro at hover throttle, punch-out climb, pitch-and-throttle forward flight (~145 km/h), roll past inverted, flip upright |
+| `cd apps/web && node e2e/fpv-flight.mjs` | the real game in the FPV acro layout: acro at hover throttle, punch-out climb, pitch-and-throttle forward flight (~260 km/h), roll past inverted, flip upright |
 | `cd apps/web && node e2e/voice-switch.mjs` | start on a station picked on the home-screen dial, switch the live host to ElevenLabs and back from Settings (spends a few hundred ElevenLabs characters) |
-| `cd apps/web && node e2e/city-collide.mjs` | against the Blender city (Arcade layout): descending stops on roofs/ground, flying into buildings crashes, respawn at altitude |
-| `cd apps/web && node e2e/ui-shots.mjs /tmp/shots` | screenshots of the home screen, every Settings tab and the HUD |
+| `cd apps/web && node e2e/city-collide.mjs` | against the Blender city (default layout): descending stops on roofs/ground, it lands and stays down, Space takes off, flying into buildings crashes, respawn at altitude |
+| `cd apps/web && node e2e/ui-shots.mjs /tmp/shots` | screenshots of the home screen, every Settings tab, the fly-in, the HUD and the station guide |
 | `cd apps/web && node e2e/city-look.mjs` | loads the city, measures fps, saves FPV and chase-cam screenshots to `logs/e2e/` |
 
 All of these pass locally as of the last run (2026-11-08). The city loads in about 7 s at 60 fps in headless Chromium.
@@ -152,6 +155,7 @@ Updating the server: `ssh deadair@66.201.4.192`, then `cd app && git pull && doc
 - Kokoro on CPU synthesizes at about 2x real time. The speaker prefetches two lines ahead, so this is fine for one VM with a handful of stations. ElevenLabs Flash sounds better but costs characters per line.
 - New pilots spawn at the spawn point nearest someone already flying, so LOCAL always has somebody to hear in a demo.
 - The radio worker measures load in shows (`MAX_SHOWS_PER_WORKER`), not host CPU. With the default CPU-based load it refused jobs whenever the machine was busy.
+- If every local join fails with "seat reservation expired", `node_modules` has ended up with two copies of `@colyseus/core` (colyseus has a peer-dependency cycle, and an incremental `pnpm add` can split it). `rm -rf node_modules apps/*/node_modules packages/*/node_modules && pnpm install` fixes it. Docker builds install fresh, so production isn't affected.
 - The radio worker doesn't hot-reload (LiveKit Agents removed in-process reload), so restart it after editing `apps/radio`.
 
 ## Layout

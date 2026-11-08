@@ -20,7 +20,8 @@ await page.goto(process.env.WEB_URL ?? "http://localhost:5173");
 await page.click(".glass-station:has-text('Port Ardent Rebuild News')");
 await page.fill(".callsign-input", "SWIFT-3");
 await page.click(".power-on");
-await page.waitForSelector(".radio");
+await page.waitForSelector(".intro-card", { timeout: 60000 });
+await page.waitForSelector(".intro-card", { state: "detached", timeout: 15000 });
 check("powers on tuned to the station picked on the dial", await waitFor(async () => (await page.locator(".freq").innerText()).includes("98.3"), 5000));
 check("host on air", await waitFor(() => page.locator(".lamp.air.lit").count().then((n) => n > 0), 30000));
 

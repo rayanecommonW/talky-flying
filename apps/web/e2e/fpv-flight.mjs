@@ -1,4 +1,4 @@
-/** FPV controls in the real game (default layout, acro): punch out, dive forward, flip, flip upright, mouse pitch. */
+/** FPV controls in the real game (FPV acro layout): punch out, dive forward, flip, flip upright, mouse pitch. */
 import { chromium } from "playwright";
 const browser = await chromium.launch({ headless: true, args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", "--use-angle=metal"] });
 const page = await (await browser.newContext({ viewport: { width: 1000, height: 640 }, permissions: ["microphone"] })).newPage();
@@ -6,11 +6,14 @@ const errors = [];
 page.on("pageerror", (e) => errors.push(e.message));
 await page.addInitScript(() => sessionStorage.getItem("fresh") || (localStorage.removeItem("deadair.settings"), sessionStorage.setItem("fresh", "1")));
 await page.goto(process.env.WEB_URL ?? "http://localhost:5173");
+await page.click(".start-settings");
+await page.click(".choice button:has-text('FPV acro')");
+await page.click(".nav-foot .close");
 await page.fill(".callsign-input", "FALCON-7");
 await page.click(".power-on");
-await page.waitForSelector(".radio");
-await page.waitForFunction(() => performance.getEntriesByType("resource").some((r) => r.name.includes("collision.glb") && r.responseEnd > 0), null, { timeout: 60000 });
-await page.waitForTimeout(4000);
+await page.waitForSelector(".intro-card", { timeout: 60000 });
+await page.waitForSelector(".intro-card", { state: "detached", timeout: 15000 });
+await page.waitForTimeout(500);
 
 const osd = async () => {
   const t = await page.locator(".top-right").innerText();
@@ -23,7 +26,7 @@ const check = (name, pass, info = "") => {
 };
 
 const start = await osd();
-check("default is acro, throttle rests at hover", start.mode.startsWith("ACRO") && Math.abs(start.thr - 20) <= 2, JSON.stringify(start));
+check("FPV layout is acro, throttle rests at hover", start.mode.startsWith("ACRO") && Math.abs(start.thr - 20) <= 2, JSON.stringify(start));
 
 await page.keyboard.down("w");
 await page.waitForTimeout(1000);

@@ -34,13 +34,13 @@ function Atmosphere() {
 export function Scene({ meta }: { meta: CityMeta | null }) {
   const third = useGame((s) => s.thirdPerson);
   const fpvFov = useSettings((s) => s.fov);
-  const fov = third ? 100 : fpvFov;
+  const fov = third ? 110 : fpvFov;
   return (
     <Canvas
       className="scene"
       dpr={[1, 1.5]}
       gl={{ antialias: false, powerPreference: "high-performance" }}
-      camera={{ fov, near: 0.05, far: 2500 }}
+      camera={{ fov, near: 0.05, far: 3500 }}
       onCreated={({ camera }) => {
         (camera as THREE.PerspectiveCamera).fov = fov;
       }}
@@ -51,7 +51,7 @@ export function Scene({ meta }: { meta: CityMeta | null }) {
       <Suspense fallback={null}>
         <Physics gravity={[0, 0, 0]} timeStep="vary">
           <City meta={meta} />
-          <PlayerDrone />
+          <PlayerDrone floor={meta ? meta.bounds.min[1] : 0} />
         </Physics>
         <RemoteDrones />
       </Suspense>

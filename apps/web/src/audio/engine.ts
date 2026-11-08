@@ -100,6 +100,31 @@ export function burst(level = 0.6, ms = 180): void {
   g.setTargetAtTime(base, t + ms / 1000, 0.05);
 }
 
+/** Air rushing past: the camera dropping out of the sky in the intro. */
+export function whoosh(level = 0.5, secs = 0.55): void {
+  if (!ctx) return;
+  const t = ctx.currentTime;
+  const len = Math.ceil(ctx.sampleRate * secs);
+  const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+  const src = ctx.createBufferSource();
+  src.buffer = buf;
+  const bp = ctx.createBiquadFilter();
+  bp.type = "bandpass";
+  bp.Q.value = 1.2;
+  bp.frequency.setValueAtTime(260, t);
+  bp.frequency.exponentialRampToValueAtTime(2600, t + secs * 0.7);
+  bp.frequency.exponentialRampToValueAtTime(700, t + secs);
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(level, t + secs * 0.6);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + secs);
+  src.connect(bp).connect(g).connect(toneBus);
+  src.start(t);
+  src.stop(t + secs + 0.05);
+}
+
 function makeDrive(amount: number): WaveShaperNode {
   const sh = audio().createWaveShaper();
   const n = 1024;

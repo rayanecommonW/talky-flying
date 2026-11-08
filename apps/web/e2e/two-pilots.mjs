@@ -33,7 +33,8 @@ async function pilot(callsign) {
   await page.goto(URL);
   await page.fill(".callsign-input", callsign);
   await page.click(".power-on");
-  await page.waitForSelector(".radio", { timeout: 20_000 });
+  await page.waitForSelector(".intro-card", { timeout: 60_000 });
+  await page.waitForSelector(".intro-card", { state: "detached", timeout: 15_000 });
   return page;
 }
 

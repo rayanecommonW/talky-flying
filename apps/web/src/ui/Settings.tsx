@@ -110,7 +110,7 @@ function KeySlot({ action, slot }: { action: BindAction; slot: number }) {
 
 const GROUPS: [string, BindAction[]][] = [
   ["Flying", ["throttleUp", "throttleDown", "yawLeft", "yawRight", "pitchForward", "pitchBack", "rollLeft", "rollRight", "mode", "reset", "camera"]],
-  ["Radio", ["ptt", "tuneUp", "tuneDown", "bandUp", "bandDown", "local"]],
+  ["Radio", ["ptt", "tuneUp", "tuneDown", "bandUp", "bandDown", "local", "guide"]],
   ["Menus", ["help", "settings"]],
 ];
 
@@ -122,17 +122,17 @@ function ControlsTab() {
         label="Layout"
         hint={
           s.layout === "arcade"
-            ? "WASD moves, mouse turns, the drone levels itself."
+            ? "The drone levels itself. W/S lean forward and back, A/D lean and slide sideways, Space/Shift up and down, the mouse turns."
             : s.layout === "fpv"
-              ? "Like a real radio: W/S throttle and A/D yaw on the left hand, the mouse is the right stick (pitch and roll)."
+              ? "Acro, nothing levels itself: W/S throttle, A/D roll, Q/E yaw, the mouse steers. Flips, dives, real FPV."
               : "Your own bindings. Pick a layout to start over from it."
         }
       >
         <Choice<Layout | "custom">
           value={s.layout}
           options={[
-            ["fpv", "FPV sticks"],
-            ["arcade", "Arcade"],
+            ["arcade", "Simple"],
+            ["fpv", "FPV acro"],
             ...(s.layout === "custom" ? ([["custom", "Custom"]] as [Layout | "custom", string][]) : []),
           ]}
           onChange={(v) => v !== "custom" && s.applyLayout(v)}
@@ -205,10 +205,13 @@ function FlightTab() {
         hint={
           s.mode === "acro"
             ? "Acro: sticks spin the drone, nothing levels it for you. Flips, rolls, dives. How FPV pilots fly."
-            : "Angle: the drone levels itself and centre throttle holds altitude. Easier, but no flips."
+            : "Angle: the drone levels itself, leaning moves it, the throttle keys only climb and sink. Easier, but no flips."
         }
       >
         <Choice value={s.mode} options={[["acro", "Acro"], ["angle", "Angle (self-level)"]]} onChange={(mode) => s.set({ mode })} />
+      </Row>
+      <Row label="Gravity" hint="Heavier drops faster and carries more momentum.">
+        <Slider value={s.gravity} min={9.81 * 0.5} max={9.81 * 3} step={9.81 * 0.1} format={(v) => `${(v / 9.81).toFixed(1)} g`} onChange={(gravity) => s.set({ gravity })} />
       </Row>
       <Row label="Power" hint="Thrust-to-weight. Hover throttle is 1 ÷ this in acro.">
         <Slider value={s.twr} min={2} max={10} step={0.5} format={(v) => `${v.toFixed(1)} : 1`} onChange={(twr) => s.set({ twr })} />
@@ -234,8 +237,8 @@ function FlightTab() {
       <Row label="Camera uptilt" hint="Acro only. More tilt suits faster forward flight.">
         <Slider value={s.cameraTilt} min={0} max={50} unit="°" onChange={(cameraTilt) => s.set({ cameraTilt })} />
       </Row>
-      <Row label="Field of view" hint="Horizontal.">
-        <Slider value={s.fov} min={70} max={150} unit="°" onChange={(fov) => s.set({ fov })} />
+      <Row label="Field of view" hint="Horizontal. Wider feels smaller and faster.">
+        <Slider value={s.fov} min={70} max={160} unit="°" onChange={(fov) => s.set({ fov })} />
       </Row>
       <Row label="Angle mode max tilt">
         <Slider value={s.angleMaxTilt} min={20} max={80} unit="°" onChange={(angleMaxTilt) => s.set({ angleMaxTilt })} />

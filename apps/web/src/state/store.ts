@@ -38,6 +38,10 @@ type GameState = {
   breakup: number;
   thirdPerson: boolean;
   showHelp: boolean;
+  /** The fly-in from the sky after power-on is playing. */
+  intro: boolean;
+  guideOpen: boolean;
+  landed: boolean;
 
   set: (p: Partial<GameState>) => void;
 };
@@ -68,6 +72,9 @@ export const useGame = create<GameState>((set) => ({
   breakup: 0,
   thirdPerson: false,
   showHelp: true,
+  intro: false,
+  guideOpen: false,
+  landed: false,
   set: (p) => set(p),
 }));
 

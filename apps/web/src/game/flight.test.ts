@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { actualRate, DEFAULT_PARAMS, hoverThrottle, initialState, rotate, step, upright, type DroneState, type FlightParams, type Sticks } from "./flight.ts";
+import { actualRate, DEFAULT_PARAMS, fromYawPitchRoll, hoverThrottle, initialState, rotate, settle, step, upright, type DroneState, type FlightParams, type Sticks } from "./flight.ts";
 
 const ANGLE: FlightParams = { ...DEFAULT_PARAMS, mode: "angle" };
 const ACRO: FlightParams = { ...DEFAULT_PARAMS, mode: "acro" };
@@ -62,7 +62,29 @@ test("acro: no self-levelling, and top speed is bounded by drag", () => {
   assert.ok(rotate(held.quat, [0, 1, 0])[1] < 0.95, "stays tilted without stick input");
   const fast = fly(tilted, { ...idle(ACRO), throttle: 1 }, 15, ACRO);
   const v = Math.hypot(...fast.vel);
-  assert.ok(v > 30 && v < 60, `top speed ${v} m/s`);
+  assert.ok(v > 70 && v < 100, `top speed ${v} m/s`);
+});
+
+test("gravity is heavier than Earth: cut the throttle and it drops fast", () => {
+  const s = fly(initialState([0, 100, 0]), { ...idle(ACRO), throttle: 0 }, 0.5, ACRO);
+  assert.ok(s.vel[1] < -6.5, `vy=${s.vel[1]}`);
+});
+
+test("angle: climbing doesn't add forward push (throttle is climb rate only)", () => {
+  const cruise = fly(initialState([0, 30, 0]), { ...idle(ANGLE), pitch: 1 }, 2, ANGLE);
+  const climbing = fly(initialState([0, 30, 0]), { ...idle(ANGLE), pitch: 1, throttle: 1 }, 2, ANGLE);
+  assert.ok(Math.abs(climbing.pos[2] - cruise.pos[2]) < 0.5, `cruise z=${cruise.pos[2]} climbing z=${climbing.pos[2]}`);
+  assert.ok(climbing.pos[1] > 50, `climbed to ${climbing.pos[1]}`);
+  const top = fly(initialState([0, 30, 0]), { ...idle(ANGLE), pitch: 1 }, 15, ANGLE);
+  const v = Math.hypot(top.vel[0], top.vel[2]);
+  assert.ok(v > 42 && v < 60, `angle top speed ${v} m/s`);
+});
+
+test("settle levels a landed drone onto its gear and stops it", () => {
+  let s = { ...initialState([0, 0.2, 0], 0.7), quat: fromYawPitchRoll(0.7, 0.4, -0.3), vel: [3, -2, 1] as [number, number, number] };
+  for (let i = 0; i < 30; i++) s = settle(s, 1 / 60);
+  assert.ok(rotate(s.quat, [0, 1, 0])[1] > 0.999);
+  assert.equal(Math.hypot(...s.vel), 0);
 });
 
 test("yaw right turns the nose clockwise seen from above", () => {

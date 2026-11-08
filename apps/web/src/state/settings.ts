@@ -11,7 +11,7 @@ export type Layout = "fpv" | "arcade";
 
 /** Bindable keyboard actions. Values are KeyboardEvent.code strings. */
 export const AXIS_ACTIONS = ["throttleUp", "throttleDown", "pitchForward", "pitchBack", "rollLeft", "rollRight", "yawLeft", "yawRight"] as const;
-export const BUTTON_ACTIONS = ["ptt", "tuneUp", "tuneDown", "bandUp", "bandDown", "local", "mode", "camera", "reset", "help", "settings"] as const;
+export const BUTTON_ACTIONS = ["ptt", "tuneUp", "tuneDown", "bandUp", "bandDown", "local", "mode", "camera", "reset", "guide", "help", "settings"] as const;
 export type AxisAction = (typeof AXIS_ACTIONS)[number];
 export type ButtonAction = (typeof BUTTON_ACTIONS)[number];
 export type BindAction = AxisAction | ButtonAction;
@@ -35,6 +35,7 @@ export const ACTION_LABEL: Record<BindAction, string> = {
   mode: "Acro / angle mode",
   camera: "Chase camera",
   reset: "Flip upright",
+  guide: "Station guide",
   help: "Show controls",
   settings: "Settings",
 };
@@ -49,45 +50,47 @@ const COMMON: Pick<Bindings, ButtonAction> = {
   mode: ["KeyR"],
   camera: ["KeyC"],
   reset: ["KeyF"],
+  guide: ["KeyB"],
   help: ["KeyH"],
   settings: ["KeyP", "Escape"],
 };
 
 export const LAYOUTS: Record<Layout, { bindings: Bindings; mouseX: Settings["mouseX"]; mouseY: Settings["mouseY"]; mode: FlightMode; throttleKeys: Settings["throttleKeys"] }> = {
-  // Throttle and yaw on the left hand, pitch and roll on the mouse: the two sticks of a real radio.
-  fpv: {
-    bindings: {
-      throttleUp: ["KeyW"],
-      throttleDown: ["KeyS"],
-      yawLeft: ["KeyA"],
-      yawRight: ["KeyD"],
-      pitchForward: ["ArrowUp"],
-      pitchBack: ["ArrowDown"],
-      rollLeft: ["ArrowLeft", "KeyQ"],
-      rollRight: ["ArrowRight", "KeyE"],
-      ...COMMON,
-    },
-    mouseX: "roll",
-    mouseY: "pitch",
-    mode: "acro",
-    throttleKeys: "spring",
-  },
-  // Self-levelling, WASD moves, mouse turns.
+  // Self-levelling: W/S lean forward and back, A/D lean sideways and slide, Space/Shift go up and
+  // down, the mouse turns. The default.
   arcade: {
     bindings: {
-      pitchForward: ["KeyW"],
-      pitchBack: ["KeyS"],
+      pitchForward: ["KeyW", "ArrowUp"],
+      pitchBack: ["KeyS", "ArrowDown"],
       rollLeft: ["KeyA"],
       rollRight: ["KeyD"],
       yawLeft: ["KeyQ", "ArrowLeft"],
       yawRight: ["KeyE", "ArrowRight"],
-      throttleUp: ["Space", "ArrowUp"],
-      throttleDown: ["ShiftLeft", "ArrowDown"],
+      throttleUp: ["Space"],
+      throttleDown: ["ShiftLeft"],
       ...COMMON,
     },
     mouseX: "yaw",
     mouseY: "off",
     mode: "angle",
+    throttleKeys: "spring",
+  },
+  // Acro, nothing levels itself: W/S throttle, A/D roll, Q/E yaw, the mouse steers (yaw and pitch).
+  fpv: {
+    bindings: {
+      throttleUp: ["KeyW"],
+      throttleDown: ["KeyS"],
+      rollLeft: ["KeyA", "ArrowLeft"],
+      rollRight: ["KeyD", "ArrowRight"],
+      yawLeft: ["KeyQ"],
+      yawRight: ["KeyE"],
+      pitchForward: ["ArrowUp"],
+      pitchBack: ["ArrowDown"],
+      ...COMMON,
+    },
+    mouseX: "yaw",
+    mouseY: "pitch",
+    mode: "acro",
     throttleKeys: "spring",
   },
 };
@@ -114,6 +117,8 @@ export type Settings = {
   twr: number;
   /** Max tilt in angle mode, degrees. */
   angleMaxTilt: number;
+  /** m/s². */
+  gravity: number;
   /** FPV camera uptilt in acro, degrees. */
   cameraTilt: number;
   /** Horizontal field of view, degrees. */
@@ -129,8 +134,8 @@ export type Settings = {
 };
 
 export const DEFAULT_SETTINGS: Settings = {
-  layout: "fpv",
-  ...LAYOUTS.fpv,
+  layout: "arcade",
+  ...LAYOUTS.arcade,
   invertMouseY: false,
   mouseSens: 0.12,
   padThrottle: "centered",
@@ -138,9 +143,10 @@ export const DEFAULT_SETTINGS: Settings = {
   rates: { center: 220, max: 720, expo: 0.45 },
   yawRates: { center: 160, max: 480, expo: 0.3 },
   twr: 5,
-  angleMaxTilt: 55,
+  angleMaxTilt: 60,
+  gravity: 1.6 * 9.81,
   cameraTilt: 20,
-  fov: 120,
+  fov: 130,
   volMaster: 0.8,
   volVoice: 1,
   volStatic: 0.35,
@@ -175,7 +181,14 @@ export const useSettings = create<SettingsStore>()(
     }),
     {
       name: "deadair.settings",
-      version: 1,
+      version: 2,
+      // v2 changed the layouts, flight tuning and defaults: keep only levels and personal preferences.
+      migrate: (persisted, version) => {
+        const p = (persisted ?? {}) as Partial<Settings>;
+        if (version >= 2) return p;
+        const keep: (keyof Settings)[] = ["volMaster", "volVoice", "volStatic", "volTones", "speech", "mouseSens", "invertMouseY", "padMode", "padThrottle"];
+        return Object.fromEntries(keep.filter((k) => k in p).map((k) => [k, p[k]]));
+      },
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<Settings>;
         return { ...current, ...p, bindings: { ...current.bindings, ...(p.bindings ?? {}) } };

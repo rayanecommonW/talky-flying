@@ -4,7 +4,7 @@
  * pointer is locked. Gamepads and USB RC radios (EdgeTX/OpenTX joystick mode) map as Mode 1 or 2.
  */
 import { hoverThrottle, type MouseRot, type Sticks } from "./flight.ts";
-import { settings, useSettings, type BindAction, type ButtonAction } from "../state/settings.ts";
+import { BUTTON_ACTIONS, settings, useSettings, type BindAction, type ButtonAction } from "../state/settings.ts";
 import { useGame } from "../state/store.ts";
 
 export type Action = ButtonAction | `preset${number}`;
@@ -39,7 +39,7 @@ function emit(a: Action, down: boolean) {
   for (const l of listeners) l(a, down);
 }
 
-const BUTTONS = new Set<string>(["ptt", "tuneUp", "tuneDown", "bandUp", "bandDown", "local", "mode", "camera", "reset", "help", "settings"]);
+const BUTTONS = new Set<string>(BUTTON_ACTIONS);
 
 /** The next key pressed goes to `fn` instead of the game (used by the rebinding UI). */
 export function captureNextKey(fn: ((code: string) => void) | null): void {
